@@ -25,12 +25,13 @@ Since this model works with any token that follows the *approve()* and *transfer
 Meta transactions can be submitted by any relayer and the relayer can be incentivized with a _gasToken_. This token can be paid by the _publisher_, the _subscriber_, or the _subscription contract_. The _subscription contract_ can also reimburse the relayers directly with Ethereum. If funds are to be paid from the _subscription contract_, the _subscriptionHash_ must be signed by the _publisher_. 
 
 
-
+```
  ██╗██████╗ ██████╗ ███████╗
 ███║╚════██╗╚════██╗╚════██║
 ╚██║ █████╔╝ █████╔╝    ██╔╝
  ██║ ╚═══██╗ ╚═══██╗   ██╔╝ 
  ██║██████╔╝██████╔╝   ██║  
  ╚═╝╚═════╝ ╚═════╝    ╚═╝  -EIP-
+ ```
                             
 (All your blockchain subscriptions are belong to us)

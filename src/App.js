@@ -22,7 +22,7 @@ class App extends Component {
     if(getParams.tokenApproval){
       tokenApproval = getParams.tokenApproval
     } else if(getParams.tokenAmount) {
-      tokenApproval = getParams.tokenAmount*12
+      tokenApproval = Math.round(getParams.tokenAmount*12*100000)/100000
     }
 
     let timeAmount = getParams.timeAmount || 1
@@ -76,7 +76,7 @@ class App extends Component {
     let {web3,tx,contracts} = this.state
     console.log("Deploying Subscription Contract...")
     let code = require("./contracts/Subscription.bytecode.js")
-    tx(contracts.Subscription._contract.deploy({data:code}),1337333,(receipt)=>{
+    tx(contracts.Subscription._contract.deploy({data:code}),140000,(receipt)=>{
       console.log("~~~~~~ DEPLOY FROM DAPPARATUS:",receipt)
       if(receipt.contractAddress){
         axios.post(backendUrl+'deploysub', receipt, {
@@ -99,7 +99,7 @@ class App extends Component {
     let update = {}
     update[e.target.name] = e.target.value
     if(e.target.name=="tokenAmount"){
-      update.tokenApproval = e.target.value*12
+      update.tokenApproval = Math.round(e.target.value*12*100000)/100000
     }
     this.setState(update,()=>{
       this.updateUrl()
@@ -289,7 +289,8 @@ class App extends Component {
                 let tokenContract = this.state.customContractLoader("SomeStableToken",this.state.tokenAddress)
                 let decimals = await tokenContract.decimals().call()
                 tx(
-                  tokenContract.approve(contracts.Subscription._address,this.state.tokenApproval*(10**decimals)),
+                  tokenContract.approve(this.state.subscriptionContract._address,this.state.tokenApproval*(10**decimals)),
+                  40000,
                   (receipt)=>{
                     console.log("TOKENS APPROVED?!?",receipt)
                   }
@@ -326,7 +327,7 @@ class App extends Component {
           if(this.state.subscriptionContractOwner=="0x0000000000000000000000000000000000000000"){
             subscriptionOwnerDisplay = (
               <div style={{fontSize:14,padding:5}}>
-                (This is the public Subscriptions contract. It can only send preappoved tokens to publishers. <a href="/README">read more</a>)
+                (This is the public Subscriptions contract. It can only send preappoved tokens to publishers. <a href="/">read more</a>)
               </div>
             )
           }else{
@@ -368,11 +369,37 @@ class App extends Component {
           )
         }
 
+        let buttonOrUrlDisplay = ""
+        let subscriberView = ""
+
+        let isSubscriptionContractOwner = (this.state.subscriptionContractOwner && this.state.account && this.state.subscriptionContractOwner.toLowerCase()==this.state.account.toLowerCase())
+        if(isSubscriptionContractOwner){
+          subscriberView = (
+            <Subscriptions backendUrl={backendUrl} {...this.state}/>
+          )
+          buttonOrUrlDisplay=(
+            <div>
+              {subscribeButton}
+              <div style={{paddingTop:30}}>
+              Share Url: <input
+                  style={{verticalAlign:"middle",width:800,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
+                  type="text" name="url" value={this.state.url} onChange={this.handleInput.bind(this)}
+              />
+              </div>
+            </div>
+          )
+        }else{
+          buttonOrUrlDisplay = (
+            <div>
+              {subscribeButton}
+            </div>
+          )
+        }
 
         contractsDisplay.push(
           <div key="UI" style={{padding:30}}>
             <div style={{padding:20}}>
-              <a href="/">Token Subscriptions POC</a>
+              <a href="/">EIP 1337 - Token Subscriptions POC</a> - <a href="https://github.com/austintgriffith/token-subscription/blob/master/README.md">read more</a>
               <div>
                 <Address
                   {...this.state}
@@ -384,8 +411,7 @@ class App extends Component {
 
             {deployDisplay}
 
-
-            <Subscriptions backendUrl={backendUrl} {...this.state}/>
+            {subscriberView}
 
             <div style={{padding:20}}>
               <div style={{fontSize:40,padding:20}}>
@@ -450,22 +476,17 @@ class App extends Component {
                 />
                 </div>
               </div>
-              {subscribeButton}
 
-              <div style={{paddingTop:30}}>
-              Share Url: <input
-                  style={{verticalAlign:"middle",width:800,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
-                  type="text" name="url" value={this.state.url} onChange={this.handleInput.bind(this)}
-              />
-              </div>
             </div>
 
+            {buttonOrUrlDisplay}
+
             <Events
-              config={{hide:false,DEBUG:true}}
+              config={{hide:false,DEBUG:false}}
               contract={subscriptionContract}
-              eventName={"ExecuteSubscription"}
+              eventName={"DebugBalance"}
               block={block}
-              filter={{from:this.state.account}}
+              /*filter={{from:this.state.account}}*/
               onUpdate={(eventData,allEvents)=>{
                 console.log("EVENT DATA:",eventData)
                 this.setState({events:allEvents})
@@ -473,11 +494,23 @@ class App extends Component {
             />
 
             <Events
-              config={{hide:false,DEBUG:true}}
+              config={{hide:false,DEBUG:false}}
               contract={subscriptionContract}
               eventName={"ExecuteSubscription"}
               block={block}
-              filter={{to:this.state.account}}
+              /*filter={{from:this.state.account}}*/
+              onUpdate={(eventData,allEvents)=>{
+                console.log("EVENT DATA:",eventData)
+                this.setState({events:allEvents})
+              }}
+            />
+
+            <Events
+              config={{hide:false,DEBUG:false}}
+              contract={subscriptionContract}
+              eventName={"FailedExecuteSubscription"}
+              block={block}
+              /*filter={{to:this.state.account}}*/
               onUpdate={(eventData,allEvents)=>{
                 console.log("EVENT DATA:",eventData)
                 this.setState({events:allEvents})

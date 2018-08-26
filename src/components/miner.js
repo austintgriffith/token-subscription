@@ -4,7 +4,7 @@ import { soliditySha3 } from 'web3-utils';
 import axios from 'axios';
 
 let pollInterval
-let pollTime = 509
+let pollTime = 1577
 
 class Miner extends Component {
   constructor(props) {

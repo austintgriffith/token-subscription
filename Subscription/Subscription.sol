@@ -30,7 +30,7 @@ contract Subscription is Ownable{
 
   constructor() public { }
 
-  //contract will need to hold funds to pay gas 
+  //contract will need to hold funds to pay gas
   // copied from https://github.com/uport-project/uport-identity/blob/develop/contracts/Proxy.sol
   function () payable { emit Received(msg.sender, msg.value); }
   event Received (address indexed sender, uint value);
@@ -180,6 +180,15 @@ contract Subscription is Ownable{
       nextValidTimestamp[subscriptionHash]=nextValidTimestamp[subscriptionHash]+periodSeconds;
     }
 
+
+    //now, let make the transfer from the subscriber to the publisher
+    bool result = (ERC20(tokenAddress)).transferFrom(from,to,tokenAmount);
+    if(result) {
+      emit ExecuteSubscription(from,to,tokenAddress,tokenAmount,periodSeconds,gasToken,gasPrice,gasPayer);
+    }else{
+      emit FailedExecuteSubscription(from,to,tokenAddress,tokenAmount,periodSeconds,gasToken,gasPrice,gasPayer);
+    }
+
     //it is possible for the subscription execution to be run by a third party
     // incentivized in the terms of the subscription with a gasToken and gasPrice
     // pay that out now...
@@ -188,20 +197,14 @@ contract Subscription is Ownable{
         //this is an interesting case where the service will pay the third party
         // ethereum out of the subscription contract itself
         // for this to work the publisher must send ethereum to the contract
-        require(publisherSigned[subscriptionHash],"Publisher has not signed this subscriptionHash");
+        require(from==owner || publisherSigned[subscriptionHash],"Publisher has not signed this subscriptionHash");
         require(msg.sender.call.value(gasPrice).gas(36000)(),"Subscription contract failed to pay ether to relayer");
       }else if(gasPayer==address(this)||gasPayer==address(0)){
         //in this case, this contract will pay a token to the relayer to
         // incentivize them to pay the gas for the meta transaction
         // for security, the publisher must have signed the subscriptionHash
-        require(publisherSigned[subscriptionHash],"Publisher has not signed this subscriptionHash");
+        require(from==owner || publisherSigned[subscriptionHash],"Publisher has not signed this subscriptionHash");
         require((ERC20(gasToken)).transfer(msg.sender,gasPrice),"Failed to pay gas as contract");
-      }else if(gasPayer==to){
-        //in this case the relayer is paid with a token from the publisher
-        // the publisher must have approved this contract AND signed the
-        // subscriptionHash for this to work
-        require(publisherSigned[subscriptionHash],"Publisher has not signed this subscriptionHash");
-        require((ERC20(gasToken)).transferFrom(to,msg.sender,gasPrice),"Failed to pay gas as to account");
       }else if(gasPayer==from){
         //in this case the relayer is paid with a token from the subscriber
         // this works best if it is the same token being transferred to the
@@ -220,15 +223,20 @@ contract Subscription is Ownable{
       }
     }
 
-    //finally, let make the transfer from the subscriber to the publisher
-    // that's what all of this is for, this one little line:
-    require((ERC20(tokenAddress)).transferFrom(from,to,tokenAmount));
-
-    emit ExecuteSubscription(from,to,tokenAddress,tokenAmount,periodSeconds,gasToken,gasPrice,gasPayer);
-    return true;
+    return result;
   }
 
   event ExecuteSubscription(
+    address indexed from, //the subscriber
+    address indexed to, //the publisher
+    address tokenAddress, //the token address paid to the publisher
+    uint256 tokenAmount, //the token amount paid to the publisher
+    uint256 periodSeconds, //the period in seconds between payments
+    address gasToken, //the address of the token to pay relayer (0 for eth)
+    uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
+    address gasPayer //the address that will pay the tokens to the relayer
+  );
+  event FailedExecuteSubscription(
     address indexed from, //the subscriber
     address indexed to, //the publisher
     address tokenAddress, //the token address paid to the publisher

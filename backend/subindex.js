@@ -294,7 +294,7 @@ function doSubscription(contract,subscriptionObject){
   console.log("Running subscription on contract ",contract._address," with local account ",accounts[3])
   let txparams = {
     from: accounts[DESKTOPMINERACCOUNT],
-    gas: 500000,
+    gas: 1000000,
     gasPrice:Math.round(4 * 1000000000)
   }
 

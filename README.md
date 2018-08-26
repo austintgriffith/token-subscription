@@ -1,11 +1,14 @@
-# 💰🕰️📋 EIP 1337 POC - Token Subscription Service 
+# 💰🕰️📋 EIP 1337 - POC - Token Subscription Service on Ethereum
 
-Uses pre-approved ERC20 tokens in combination with meta transactions to create recurring subscriptions on the Ethereum blockchain with as little burden on the subscriber as possible. 
-
-A subscriber signs a single off-chain transaction, relayers will continue to submit it when it becomes valid, and the publisher will regularly receive tokens.
-The subscriber controls the limit and status of the subscription using the ERC20 approve() command on the token contract. 
+Subscribers sign a single off-chain meta transaction that is periodically resubmitted to the blockchain to create a trustless set-it-and-forget-it subscription model on Ethereum. 
 
 [https://github.com/ethereum/EIPs/pull/1337](https://github.com/ethereum/EIPs/pull/1337)
+
+## Demo
+
+[![screencast.png](https://user-images.githubusercontent.com/2653167/44634126-7a5b0d00-a952-11e8-85fd-16e66a36ad07.png)](https://youtu.be/6r3SqCcEVU4)
+
+[https://sub.metatx.io](https://sub.metatx.io)
 
 ## Abstract
 
@@ -23,3 +26,11 @@ Meta transactions can be submitted by any relayer and the relayer can be incenti
 
 
 
+ ██╗██████╗ ██████╗ ███████╗
+███║╚════██╗╚════██╗╚════██║
+╚██║ █████╔╝ █████╔╝    ██╔╝
+ ██║ ╚═══██╗ ╚═══██╗   ██╔╝ 
+ ██║██████╔╝██████╔╝   ██║  
+ ╚═╝╚═════╝ ╚═════╝    ╚═╝  -EIP-
+                            
+(All your blockchain subscriptions are belong to us)

@@ -2,6 +2,9 @@
 
 Uses pre-approved ERC20 tokens in combination with meta transactions to create recurring subscriptions on the Ethereum blockchain with as little burden on the subscriber as possible. 
 
+A subscriber signs a single off-chain transaction, off-chain relayers will continue to submit it when it becomes valid, and the publisher will regularly receive tokens.
+The subscriber controls the limit and status of the subscription using the ERC20 approve() command on the token contract. 
+
 ## Abstract
 
 A _publisher_ provides an ongoing service to multiple _subscribers_ and wishes to receive compensation on a periodic interval. The _publisher_ can deploy a lightweight _subscription contract_ to represent their service. Then, the _publisher_ sends _subscribers_ a link to terms which they sign as a single, off-chain meta transaction. This meta transaction is sent to the _publisher_ and/or a third party network that is incentivized with a _gasToken_. 

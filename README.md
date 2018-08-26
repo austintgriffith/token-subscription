@@ -1,10 +1,10 @@
 # Token Subscription Service 
 
-Using preapproved ERC20 tokens in combination with meta transactions to create reoccurring subscriptions on the Ethereum blockchain with as little burdon on the subscriber as possbile. 
+Uses pre-approved ERC20 tokens in combination with meta transactions to create recurring subscriptions on the Ethereum blockchain with as little burden on the subscriber as possible. 
 
 ## Abstract
 
-A _publisher_ provides an ongoing service to multiple _subscribers_ and wishes to receive compensation on a periodic interval. The _publisher_ can deploy a lightweight _subscription contract_ to represent their service. Then, the _publisher_ sends _subscribers_ a link to terms which they sign as a single, off-chain meta transaction. This meta transaction is sent to the _publisher_ and/or a third party network that is otherwise incentivized. 
+A _publisher_ provides an ongoing service to multiple _subscribers_ and wishes to receive compensation on a periodic interval. The _publisher_ can deploy a lightweight _subscription contract_ to represent their service. Then, the _publisher_ sends _subscribers_ a link to terms which they sign as a single, off-chain meta transaction. This meta transaction is sent to the _publisher_ and/or a third party network that is incentivized with a _gasToken_. 
 
 Immediately, and repeatedly after the agreed upon the period, the single meta transaction becomes valid using a timestamp or block number nonce (instead of a traditional replay attack nonce). The single, signed meta transaction can be submitted, proven valid through *ecrecover()*, and the *transferFrom()* of the pre-approved erc20 token from _subscriber_ to _publisher_ is executed. 
 
@@ -14,7 +14,7 @@ The _subscription contract_ also holds logic representing the subscription statu
 
 Since this model works with any token that follows the *approve()* and *transferFrom()* standard, a stable token might serve as the best option for long running, monthly subscriptions. This shields both _publisher_ and _subscriber_ from price fluctuations.
 
-
+Meta transactions can be submitted by any relayer and the relayer can be incentivized with a _gasToken_. This token can be paid by the _publisher_, the _subscriber_, or the _subscription contract_. The _subscription contract_ can also reimburse the relayers directly with Ethereum. If funds are to be paid from the _subscription contract_, the _subscriptionHash_ must be signed by the _publisher_. 
 
 
 

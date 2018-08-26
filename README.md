@@ -1,9 +1,11 @@
-# Token Subscription Service 
+# EIP 1337 Token Subscription Service POC
 
 Uses pre-approved ERC20 tokens in combination with meta transactions to create recurring subscriptions on the Ethereum blockchain with as little burden on the subscriber as possible. 
 
 A subscriber signs a single off-chain transaction, relayers will continue to submit it when it becomes valid, and the publisher will regularly receive tokens.
 The subscriber controls the limit and status of the subscription using the ERC20 approve() command on the token contract. 
+
+[https://github.com/ethereum/EIPs/pull/1337](https://github.com/ethereum/EIPs/pull/1337)
 
 ## Abstract
 

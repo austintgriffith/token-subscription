@@ -372,11 +372,7 @@ contract Subscription is Ownable{
         // incentivize them to pay the gas for the meta transaction
         // for security, the publisher must have signed the subscriptionHash
         require(from==owner || publisherSigned[subscriptionHash],"Publisher has not signed this subscriptionHash");
-        //require((ERC20(gasToken)).transfer(msg.sender,gasPrice),"Failed to pay gas as contract");
-        emit DebugBalance((ERC20(gasToken)).balanceOf(address(this)));
-        emit DebugBalance(gasPrice);
-      //  bool txresult = (ERC20(gasToken)).transfer(msg.sender,gasPrice);
-      //  emit Debug(txresult);
+        require((ERC20(gasToken)).transfer(msg.sender,gasPrice),"Failed to pay gas as contract");
       }else if(gasPayer==from){
         //in this case the relayer is paid with a token from the subscriber
         // this works best if it is the same token being transferred to the
@@ -397,8 +393,6 @@ contract Subscription is Ownable{
 
     return result;
   }
-  event DebugBalance(uint balance);
-  event Debug(bool result);
 
   event ExecuteSubscription(
     address indexed from, //the subscriber

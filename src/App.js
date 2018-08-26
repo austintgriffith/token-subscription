@@ -6,11 +6,14 @@ import queryString from 'query-string';
 import axios from 'axios';
 import Miner from './components/miner.js';
 import Subscriptions from './components/subscriptions.js';
-let backendUrl = "http://localhost:10002/"
+let backendUrl = "http://localhost:10001/"
 console.log("window.location:",window.location)
-if(window.location.href.indexOf("metatx.io")>=0)
+/*if(window.location.href.indexOf("metatx.io")>=0)
 {
-  backendUrl = "https://subbackend.metatx.io/"
+  backendUrl = "http://stage.metatx.io:10001/"
+}else */if(window.location.href.indexOf("metatx.io")>=0)
+{
+  backendUrl = "https://backend.metatx.io/"
 }
 
 class App extends Component {
@@ -480,18 +483,6 @@ class App extends Component {
             </div>
 
             {buttonOrUrlDisplay}
-
-            <Events
-              config={{hide:false,DEBUG:false}}
-              contract={subscriptionContract}
-              eventName={"DebugBalance"}
-              block={block}
-              /*filter={{from:this.state.account}}*/
-              onUpdate={(eventData,allEvents)=>{
-                console.log("EVENT DATA:",eventData)
-                this.setState({events:allEvents})
-              }}
-            />
 
             <Events
               config={{hide:false,DEBUG:false}}

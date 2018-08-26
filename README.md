@@ -1,4 +1,4 @@
-# 🕰️📋 EIP 1337 POC - Token Subscription Service 
+# 💰🕰️📋 EIP 1337 POC - Token Subscription Service 
 
 Uses pre-approved ERC20 tokens in combination with meta transactions to create recurring subscriptions on the Ethereum blockchain with as little burden on the subscriber as possible. 
 

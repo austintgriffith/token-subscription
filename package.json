@@ -3,8 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "body-parser": "^1.18.3",
     "clevis": "0.0.77",
+    "cors": "^2.8.4",
     "dapparatus": "^1.0.20",
+    "express": "^4.16.3",
+    "helmet": "^3.13.0",
+    "ioredis": "^4.0.0",
     "mocha": "^5.2.0",
     "react": "^16.4.2",
     "react-dom": "^16.4.2",

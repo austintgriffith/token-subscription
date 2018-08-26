@@ -15,7 +15,7 @@ pragma solidity ^0.4.24;
   https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1077.md
   https://github.com/gnosis/safe-contracts
 
-  Earlier Meta Transaction Demo: 
+  Earlier Meta Transaction Demo:
   https://github.com/austintgriffith/bouncer-proxy
 
   Huge thanks to, as always, to OpenZeppelin for the rad contracts:
@@ -198,6 +198,11 @@ contract Subscription is Ownable{
 
   constructor() public { }
 
+  //contract will need to hold funds to pay gas 
+  // copied from https://github.com/uport-project/uport-identity/blob/develop/contracts/Proxy.sol
+  function () payable { emit Received(msg.sender, msg.value); }
+  event Received (address indexed sender, uint value);
+
   //similar to a nonce that avoids replay attacks this allows a single execution
   // every x seconds for a given subscription
   //   subscriptionHash  => next valid block number
@@ -230,7 +235,7 @@ contract Subscription is Ownable{
     address from, //the subscriber
     address to, //the publisher
     address tokenAddress, //the token address paid to the publisher
-    uint tokenAmount, //the token amount paid to the publisher
+    uint256 tokenAmount, //the token amount paid to the publisher
     uint256 periodSeconds, //the period in seconds between payments
     address gasToken, //the address of the token to pay relayer (0 for eth)
     uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
@@ -243,13 +248,25 @@ contract Subscription is Ownable{
      return keccak256(abi.encodePacked(byte(0x19),byte(0),address(this),from,to,tokenAddress,tokenAmount,periodSeconds,gasToken,gasPrice,gasPayer));
   }
 
+  //ecrecover the signer from hash and the signature
+  function getSubscriptionSigner(
+    bytes32 subscriptionHash, //hash of subscription
+    bytes signature //proof the subscriber signed the meta trasaction
+  )
+    public
+    pure
+    returns (address)
+  {
+    return subscriptionHash.toEthSignedMessageHash().recover(signature);
+  }
+
   //check if a subscription is signed correctly and the timestamp is ready for
   // the next execution to happen
   function isSubscriptionReady(
     address from, //the subscriber
     address to, //the publisher
     address tokenAddress, //the token address paid to the publisher
-    uint tokenAmount, //the token amount paid to the publisher
+    uint256 tokenAmount, //the token amount paid to the publisher
     uint256 periodSeconds, //the period in seconds between payments
     address gasToken, //the address of the token to pay relayer (0 for eth)
     uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
@@ -261,8 +278,9 @@ contract Subscription is Ownable{
     returns (bool)
   {
     bytes32 subscriptionHash = getSubscriptionHash(from,to,tokenAddress,tokenAmount,periodSeconds,gasToken,gasPrice,gasPayer);
-    address signer = subscriptionHash.toEthSignedMessageHash().recover(signature);
-    return (signer==from && block.timestamp>=nextValidTimestamp[subscriptionHash]);
+    address signer = getSubscriptionSigner(subscriptionHash,signature);
+    uint allowance = (ERC20(tokenAddress)).allowance(from,address(this));
+    return (signer==from && block.timestamp>=nextValidTimestamp[subscriptionHash] && allowance>=tokenAmount);
   }
 
   //you don't really need this if you are using the approve/transferFrom method
@@ -272,7 +290,7 @@ contract Subscription is Ownable{
     address from, //the subscriber
     address to, //the publisher
     address tokenAddress, //the token address paid to the publisher
-    uint tokenAmount, //the token amount paid to the publisher
+    uint256 tokenAmount, //the token amount paid to the publisher
     uint256 periodSeconds, //the period in seconds between payments
     address gasToken, //the address of the token to pay relayer (0 for eth)
     uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
@@ -301,7 +319,7 @@ contract Subscription is Ownable{
     address from, //the subscriber
     address to, //the publisher
     address tokenAddress, //the token address paid to the publisher
-    uint tokenAmount, //the token amount paid to the publisher
+    uint256 tokenAmount, //the token amount paid to the publisher
     uint256 periodSeconds, //the period in seconds between payments
     address gasToken, //the address of the token to pay relayer (0 for eth)
     uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
@@ -315,7 +333,7 @@ contract Subscription is Ownable{
     //make sure the subscription is valid and ready
     // pulled this out so I have the hash, should be exact code as "isSubscriptionReady"
     bytes32 subscriptionHash = getSubscriptionHash(from,to,tokenAddress,tokenAmount,periodSeconds,gasToken,gasPrice,gasPayer);
-    address signer = subscriptionHash.toEthSignedMessageHash().recover(signature);
+    address signer = getSubscriptionSigner(subscriptionHash,signature);
 
     //the signature must be valid
     require(signer==from,"Invalid Signature");
@@ -345,18 +363,18 @@ contract Subscription is Ownable{
         // incentivize them to pay the gas for the meta transaction
         // for security, the publisher must have signed the subscriptionHash
         require(publisherSigned[subscriptionHash],"Publisher has not signed this subscriptionHash");
-        require((ERC20(gasToken)).transfer(msg.sender,gasPrice));
+        require((ERC20(gasToken)).transfer(msg.sender,gasPrice),"Failed to pay gas as contract");
       }else if(gasPayer==to){
         //in this case the relayer is paid with a token from the publisher
         // the publisher must have approved this contract AND signed the
         // subscriptionHash for this to work
         require(publisherSigned[subscriptionHash],"Publisher has not signed this subscriptionHash");
-        require((ERC20(gasToken)).transferFrom(to,msg.sender,gasPrice));
+        require((ERC20(gasToken)).transferFrom(to,msg.sender,gasPrice),"Failed to pay gas as to account");
       }else if(gasPayer==from){
         //in this case the relayer is paid with a token from the subscriber
         // this works best if it is the same token being transferred to the
         // publisher because it is already in the allowance
-        require((ERC20(gasToken)).transferFrom(from,to,gasPrice));
+        require((ERC20(gasToken)).transferFrom(from,msg.sender,gasPrice),"Failed to pay gas as from account");
       }else{
         //the subscriber could craft the gasPayer to be a fellow subscriber that
         // that has approved this contract to move tokens and then exploit that
@@ -379,10 +397,10 @@ contract Subscription is Ownable{
   }
 
   event ExecuteSubscription(
-    address from, //the subscriber
-    address to, //the publisher
+    address indexed from, //the subscriber
+    address indexed to, //the publisher
     address tokenAddress, //the token address paid to the publisher
-    uint tokenAmount, //the token amount paid to the publisher
+    uint256 tokenAmount, //the token amount paid to the publisher
     uint256 periodSeconds, //the period in seconds between payments
     address gasToken, //the address of the token to pay relayer (0 for eth)
     uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)

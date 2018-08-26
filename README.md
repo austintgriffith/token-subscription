@@ -1,4 +1,4 @@
-# 💰🕰️📋 EIP 1337 - POC - Token Subscription Service on Ethereum
+# 💰🕰️📋 EIP 1337 POC - Token Subscriptions on Ethereum
 
 Subscribers sign a single off-chain meta transaction that is periodically resubmitted to the blockchain to create a trustless set-it-and-forget-it subscription model on Ethereum. 
 
@@ -6,7 +6,7 @@ Subscribers sign a single off-chain meta transaction that is periodically resubm
 
 ## Demo
 
-[![screencast.png](https://user-images.githubusercontent.com/2653167/44634126-7a5b0d00-a952-11e8-85fd-16e66a36ad07.png)](https://youtu.be/6r3SqCcEVU4)
+[![screencast.png](https://user-images.githubusercontent.com/2653167/44634126-7a5b0d00-a952-11e8-85fd-16e66a36ad07.png)](https://youtu.be/_znjpTRGCbs)
 
 [https://sub.metatx.io](https://sub.metatx.io)
 

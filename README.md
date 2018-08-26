@@ -1,4 +1,4 @@
-# ERC20 Subscription Service 
+# Token Subscription Service 
 
 Using preapproved ERC20 tokens in combination with meta transactions to create reoccurring subscriptions on the Ethereum blockchain with as little burdon on the subscriber as possbile. 
 

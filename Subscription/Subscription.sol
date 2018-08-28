@@ -22,18 +22,18 @@ Huge thanks to, as always, to OpenZeppelin for the rad contracts:
  */
 
 import "openzeppelin-solidity/contracts/ECRecovery.sol";
+import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity/contracts/token/ERC20/ERC20.sol";
 
 
 contract Subscription is Ownable {
     using ECRecovery for bytes32;
-
-    constructor() public { }
+    using SafeMath for uint256;
 
     // contract will need to hold funds to pay gas
     // copied from https://github.com/uport-project/uport-identity/blob/develop/contracts/Proxy.sol
-    function () payable { 
+    function () public payable {
         emit Received(msg.sender, msg.value); 
     }
 
@@ -63,7 +63,7 @@ contract Subscription is Ownable {
     // similar to a nonce that avoids replay attacks this allows a single execution
     // every x seconds for a given subscription
     // subscriptionHash  => next valid block number
-    mapping(bytes32 => uint) public nextValidTimestamp;
+    mapping(bytes32 => uint256) public nextValidTimestamp;
 
     // for some cases of delegated execution, this contract will pay a third party
     // to execute the transfer. If this happens, the owner of this contract must
@@ -95,7 +95,7 @@ contract Subscription is Ownable {
         returns (bool) 
     {
         return (block.timestamp >= 
-                    nextValidTimestamp[subscriptionHash] + gracePeriodSeconds
+                    nextValidTimestamp[subscriptionHash].add(gracePeriodSeconds)
         );
     }
 
@@ -168,7 +168,7 @@ contract Subscription is Ownable {
         return (
             signer == from &&
             block.timestamp >= nextValidTimestamp[subscriptionHash] && 
-            allowance>=tokenAmount
+            allowance >= tokenAmount
         );
     }
 
@@ -236,9 +236,10 @@ contract Subscription is Ownable {
 
         // increment the next valid period time
         if (nextValidTimestamp[subscriptionHash] == 0) {
-            nextValidTimestamp[subscriptionHash] = block.timestamp + periodSeconds;
+            nextValidTimestamp[subscriptionHash] = block.timestamp.add(periodSeconds);
         } else {
-            nextValidTimestamp[subscriptionHash] += periodSeconds;
+            nextValidTimestamp[subscriptionHash] = 
+                nextValidTimestam[subscriptionHash].add(periodSeconds);
         }
 
         // now, let make the transfer from the subscriber to the publisher
@@ -256,7 +257,7 @@ contract Subscription is Ownable {
         // it is possible for the subscription execution to be run by a third party
         // incentivized in the terms of the subscription with a gasToken and gasPrice
         // pay that out now...
-        if (gasPrice>0) {
+        if (gasPrice > 0) {
             if (gasToken == address(0)) {
                 // this is an interesting case where the service will pay the third party
                 // ethereum out of the subscription contract itself
@@ -273,11 +274,11 @@ contract Subscription is Ownable {
                 // in this case, this contract will pay a token to the relayer to
                 // incentivize them to pay the gas for the meta transaction
                 // for security, the publisher must have signed the subscriptionHash
-                require(from==owner || publisherSigned[subscriptionHash],
+                require(from == owner || publisherSigned[subscriptionHash],
                         "Publisher has not signed this subscriptionHash"
                 );
 
-                require(ERC20(gasToken).transfer(msg.sender,gasPrice),
+                require(ERC20(gasToken).transfer(msg.sender, gasPrice),
                         "Failed to pay gas as contract"
                 );
             } else if (gasPayer == from) {
@@ -285,7 +286,7 @@ contract Subscription is Ownable {
                 // this works best if it is the same token being transferred to the
                 // publisher because it is already in the allowance
                 require(
-                    ERC20(gasToken).transferFrom(from,msg.sender,gasPrice),
+                    ERC20(gasToken).transferFrom(from, msg.sender, gasPrice),
                     "Failed to pay gas as from account"
                 );
             } else {

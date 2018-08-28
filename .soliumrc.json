@@ -1,0 +1,4 @@
+{
+  "extends": "solium:all",
+  "rules": {}
+}

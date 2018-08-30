@@ -209,7 +209,13 @@ class App extends Component {
     let {web3,account,contracts,tx,gwei,block,avgBlockTime,etherscan,subscriptionContract} = this.state
     let connectedDisplay = []
     let contractsDisplay = []
+
+    let mainTitle = ""
+
     if(web3){
+
+
+
       connectedDisplay.push(
        <Gas
          key="Gas"
@@ -267,6 +273,9 @@ class App extends Component {
 
       if(contracts&&subscriptionContract){
 
+        mainTitle= (
+          <div></div>
+        )
 
         let subscribeButton = (
           <div style={{opacity:0.5}}>
@@ -330,7 +339,7 @@ class App extends Component {
           if(this.state.subscriptionContractOwner=="0x0000000000000000000000000000000000000000"){
             subscriptionOwnerDisplay = (
               <div style={{fontSize:14,padding:5}}>
-                (This is the public Subscriptions contract. It can only send preappoved tokens to publishers. <a href="/">read more</a>)
+                (This is the public Subscriptions contract. It can only send preappoved tokens to publishers. <a href="https://github.com/austintgriffith/token-subscription">read more</a>)
               </div>
             )
           }else{
@@ -402,7 +411,11 @@ class App extends Component {
         contractsDisplay.push(
           <div key="UI" style={{padding:30}}>
             <div style={{padding:20}}>
-              <a href="/">EIP 1337 - Token Subscriptions POC</a> - <a href="https://github.com/austintgriffith/token-subscription/blob/master/README.md">read more</a>
+              <a href="/">EIP 1337 - Token Subscriptions POC</a> -   <Button onClick={()=>{
+                  window.location = "https://github.com/austintgriffith/token-subscription"
+                }}>
+                LEARN MORE
+                </Button>
               <div>
                 <Address
                   {...this.state}
@@ -514,6 +527,40 @@ class App extends Component {
       }
 
     }
+
+    if(!mainTitle){
+      mainTitle = (
+        <div style={{padding:20,paddingTop:100}}>
+          <div className="titleCenter" style={{marginTop:-50}}>
+            <Scaler config={{origin:"center center"}}>
+            <div style={{width:"100%",textAlign:"center",fontSize:120}}>
+             sub.metatx.io
+            </div>
+            <div style={{width:"100%",textAlign:"center",fontSize:24}}>
+             <div>recurring subscriptions on the ethereum blockchain</div>
+             <div>set it and forget it token transfers</div>
+            </div>
+            <div style={{width:"100%",textAlign:"center",fontSize:14,marginBottom:20}}>
+             please unlock metamask or mobile web3 provider
+            </div>
+            <div style={{width:"100%",textAlign:"center"}}>
+              <Button size="2" onClick={()=>{
+                window.location = "https://github.com/austintgriffith/token-subscription"
+              }}>
+              LEARN MORE
+              </Button>
+              <Button color="orange" size="2" onClick={()=>{
+                alert("Please unlock Metamask or install web3 or mobile ethereum wallet.")
+              }}>
+              DEPLOY SUBSCRIPTION CONTRACT
+              </Button>
+            </div>
+            </Scaler>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="App">
         <Metamask
@@ -526,6 +573,7 @@ class App extends Component {
            }
           }}
         />
+        {mainTitle}
         {connectedDisplay}
         {contractsDisplay}
 

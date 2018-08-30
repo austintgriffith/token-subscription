@@ -8,7 +8,8 @@ pragma solidity ^0.4.24;
 
 import "openzeppelin-solidity/contracts/token/ERC20/MintableToken.sol";
 
-contract SomeStableToken is MintableToken{
+
+contract SomeStableToken is MintableToken {
 
   string public name = "SomeStableToken";
   string public symbol = "SST";

@@ -31,10 +31,12 @@ contract Subscription is Ownable {
     using ECRecovery for bytes32;
     using SafeMath for uint256;
 
+    constructor() public { }
+
     // contract will need to hold funds to pay gas
     // copied from https://github.com/uport-project/uport-identity/blob/develop/contracts/Proxy.sol
     function () public payable {
-        emit Received(msg.sender, msg.value); 
+        emit Received(msg.sender, msg.value);
     }
 
     event Received (address indexed sender, uint value);
@@ -73,10 +75,10 @@ contract Subscription is Ownable {
     // only the owner of this contract can sign the subscriptionHash to whitelist
     // a specific subscription to start rewarding the relayers for paying the
     // gas of the transactions out of the balance of this contract
-    function signSubscriptionHash(bytes32 subscriptionHash) 
-        public 
-        onlyOwner 
-        returns(bool) 
+    function signSubscriptionHash(bytes32 subscriptionHash)
+        public
+        onlyOwner
+        returns(bool)
     {
         publisherSigned[subscriptionHash] = true;
         return true;
@@ -87,14 +89,14 @@ contract Subscription is Ownable {
     // there must be a small grace period added to allow the publisher
     // or desktop miner to execute
     function isSubscriptionActive(
-        bytes32 subscriptionHash, 
+        bytes32 subscriptionHash,
         uint256 gracePeriodSeconds
-    ) 
-        external 
-        view 
-        returns (bool) 
+    )
+        external
+        view
+        returns (bool)
     {
-        return (block.timestamp >= 
+        return (block.timestamp >=
                     nextValidTimestamp[subscriptionHash].add(gracePeriodSeconds)
         );
     }
@@ -167,7 +169,7 @@ contract Subscription is Ownable {
         uint256 allowance = ERC20(tokenAddress).allowance(from, address(this));
         return (
             signer == from &&
-            block.timestamp >= nextValidTimestamp[subscriptionHash] && 
+            block.timestamp >= nextValidTimestamp[subscriptionHash] &&
             allowance >= tokenAmount
         );
     }
@@ -197,8 +199,10 @@ contract Subscription is Ownable {
         //the signature must be valid
         require(signer == from, "Invalid Signature for subscription cancellation");
 
-        // Reset next valid timestamp
-        delete nextValidTimestamp[subscriptionHash];
+        //since we can't underflow (SAFEMATH!), we'll just set it to a large number
+        nextValidTimestamp[subscriptionHash]=99999999999; //subscription will become valid again Wednesday, November 16, 5138 9:46:39 AM
+        //at this point the nextValidTimestamp should be a timestamp that will never
+        //be reached during the brief window human existence
 
         return true;
     }
@@ -238,7 +242,7 @@ contract Subscription is Ownable {
         if (nextValidTimestamp[subscriptionHash] == 0) {
             nextValidTimestamp[subscriptionHash] = block.timestamp.add(periodSeconds);
         } else {
-            nextValidTimestamp[subscriptionHash] = 
+            nextValidTimestamp[subscriptionHash] =
                 nextValidTimestamp[subscriptionHash].add(periodSeconds);
         }
 
@@ -267,7 +271,7 @@ contract Subscription is Ownable {
                     "Publisher has not signed this subscriptionHash"
                 );
 
-                require(msg.sender.call.value(gasPrice).gas(36000)(),
+                require(msg.sender.call.value(gasPrice).gas(36000)(),//still unsure about how much gas to use here
                         "Subscription contract failed to pay ether to relayer"
                 );
             } else if (gasPayer == address(this) || gasPayer == address(0)) {

@@ -239,7 +239,7 @@ contract Subscription is Ownable {
             nextValidTimestamp[subscriptionHash] = block.timestamp.add(periodSeconds);
         } else {
             nextValidTimestamp[subscriptionHash] = 
-                nextValidTimestam[subscriptionHash].add(periodSeconds);
+                nextValidTimestamp[subscriptionHash].add(periodSeconds);
         }
 
         // now, let make the transfer from the subscriber to the publisher

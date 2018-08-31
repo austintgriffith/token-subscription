@@ -33,5 +33,4 @@ Meta transactions can be submitted by any relayer and the relayer can be incenti
  ██║██████╔╝██████╔╝   ██║  
  ╚═╝╚═════╝ ╚═════╝    ╚═╝  -EIP-
  ```
-                            
-(All your blockchain subscriptions are belong to us)
+

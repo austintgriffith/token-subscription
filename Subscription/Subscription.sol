@@ -7,18 +7,20 @@ pragma solidity ^0.4.24;
 
    Austin Thomas Griffith - https://austingriffith.com
 
+   https://github.com/austintgriffith/token-subscription
+
    Building on previous works:
-https://gist.github.com/androolloyd/0a62ef48887be00a5eff5c17f2be849a
-https://media.consensys.net/subscription-services-on-the-blockchain-erc-948-6ef64b083a36
-https://medium.com/gitcoin/technical-deep-dive-architecture-choices-for-subscriptions-on-the-blockchain-erc948-5fae89cabc7a
-https://github.com/ethereum/EIPs/pull/1337
-https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1077.md
-https://github.com/gnosis/safe-contracts
+    https://gist.github.com/androolloyd/0a62ef48887be00a5eff5c17f2be849a
+    https://media.consensys.net/subscription-services-on-the-blockchain-erc-948-6ef64b083a36
+    https://medium.com/gitcoin/technical-deep-dive-architecture-choices-for-subscriptions-on-the-blockchain-erc948-5fae89cabc7a
+    https://github.com/ethereum/EIPs/pull/1337
+    https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1077.md
+    https://github.com/gnosis/safe-contracts
 
-Earlier Meta Transaction Demo:
-https://github.com/austintgriffith/bouncer-proxy
+  Earlier Meta Transaction Demo:
+    https://github.com/austintgriffith/bouncer-proxy
 
-Huge thanks to, as always, to OpenZeppelin for the rad contracts:
+  Huge thanks to, as always, to OpenZeppelin for the rad contracts:
  */
 
 import "openzeppelin-solidity/contracts/ECRecovery.sol";
@@ -238,13 +240,30 @@ contract Subscription is Ownable {
             "Subscription is not ready"
         );
 
+
+
+
+
         // increment the next valid period time
-        if (nextValidTimestamp[subscriptionHash] == 0) {
+        //if (nextValidTimestamp[subscriptionHash] == 0) {
+
+            //I changed this to always use the timestamp
+            // this means desktop miners MUST submit transactions as fast as possible
+            // or subscriptions will start to lag
+            // the upside of doing it this way is the approve/allowance of the erc20
+            // can now pause and restart the subscription whenever they want
             nextValidTimestamp[subscriptionHash] = block.timestamp.add(periodSeconds);
-        } else {
-            nextValidTimestamp[subscriptionHash] =
-                nextValidTimestamp[subscriptionHash].add(periodSeconds);
-        }
+
+            //if you would like your subscription to be able to submit multiple months
+            // all at once, switch back to the uncommented method, but if the subscriber
+            // pauses the allowance and then later approves... a bunch of funds can all
+            // move at once as you work through past months of unpaid subscriptions
+
+
+        //} else {
+        //      nextValidTimestamp[subscriptionHash] =
+        //        nextValidTimestamp[subscriptionHash].add(periodSeconds);
+        //}
 
         // now, let make the transfer from the subscriber to the publisher
         bool result = ERC20(tokenAddress).transferFrom(from,to,tokenAmount);

@@ -34,6 +34,8 @@ if(!NETWORK){
 }
 console.log("NETWORK:",NETWORK)
 
+let transactionListKey = "transactionList"+NETWORK
+
 let subscriptionListKey = "subscriptionList"+NETWORK
 
 
@@ -49,11 +51,13 @@ let redis = new Redis({
 })
 
 console.log("LOADING CONTRACTS")
-contracts = ContractLoader(["Subscription"],web3);
+contracts = ContractLoader(["BouncerProxy","Example","SomeStableToken","Subscription"],web3);
+
+
 
 //my local geth node takes a while to spin up so I don't want to start parsing until I'm getting real data
 function checkForGeth() {
-  contracts["Subscription"].methods.owner().call({}, function(error, result){
+  contracts["Example"].methods.count().call({}, function(error, result){
       console.log("COUNT",error,result)
       if(error){
         setTimeout(checkForGeth,15000);
@@ -66,11 +70,39 @@ checkForGeth()
 
 function startParsers(){
   web3.eth.getBlockNumber().then((blockNumber)=>{
+
+      console.log("web3.txpool",web3.txpool)
+
     //parsers here
     //
     //
+   setInterval(()=>{
+      console.log("::: TX CHECKER :::: loading transactions from cache...")
+      redis.get(transactionListKey, async (err, result) => {
+        let transactions
+        try{
+          transactions = JSON.parse(result)
+        }catch(e){contracts = []}
+        if(!transactions) transactions = []
+        console.log("current transactions:",transactions.length)
+        for(let t in transactions){
+          console.log("Check Tx:",transactions[t].sig)
+          let contract = new web3.eth.Contract(contracts.BouncerProxy._jsonInterface,transactions[t].parts[0])
+          let ready = await contract.methods.isValidSigAndBlock(transactions[t].sig,transactions[t].parts[1],transactions[t].parts[2],transactions[t].parts[3],transactions[t].parts[4],transactions[t].parts[5],transactions[t].parts[6],transactions[t].parts[7]).call()
+          if(ready){
+            console.log("Transaction is READY ---> ")
+            doTransaction(contract,transactions[t])
+            removeTransaction(transactions[t].sig)
+          }
+        }
+      });
+    },5000)
+
     setInterval(()=>{
       console.log("::: SUBSCRIPTION CHECKER :::: loading subscriptions from cache...")
+
+
+
       redis.get(subscriptionListKey, async (err, result) => {
         let subscriptions
         try{
@@ -81,32 +113,53 @@ function startParsers(){
         for(let t in subscriptions){
           console.log("Check Sub Signature:",subscriptions[t].signature)
           let contract = new web3.eth.Contract(contracts.Subscription._jsonInterface,subscriptions[t].subscriptionContract)
+          console.log("loading hash...")
           let doubleCheckHash = await contract.methods.getSubscriptionHash(subscriptions[t].parts[0],subscriptions[t].parts[1],subscriptions[t].parts[2],subscriptions[t].parts[3],subscriptions[t].parts[4],subscriptions[t].parts[5],subscriptions[t].parts[6],subscriptions[t].parts[7]).call()
-          //console.log(subscriptions[t].parts[0],subscriptions[t].parts[1],subscriptions[t].parts[2],subscriptions[t].parts[3],subscriptions[t].parts[4],subscriptions[t].parts[5],subscriptions[t].parts[6],subscriptions[t].parts[7],subscriptions[t].signature)
+          console.log("checking if ready...")
           let ready = await contract.methods.isSubscriptionReady(subscriptions[t].parts[0],subscriptions[t].parts[1],subscriptions[t].parts[2],subscriptions[t].parts[3],subscriptions[t].parts[4],subscriptions[t].parts[5],subscriptions[t].parts[6],subscriptions[t].parts[7],subscriptions[t].signature).call()
+          console.log("READY:",ready)
           if(ready){
-            console.log("subscription says it's ready... try a dry run ---> ")
-            let dryRun = false
-            try{
-              dryRun = await contract.methods.executeSubscription(subscriptions[t].parts[0],subscriptions[t].parts[1],subscriptions[t].parts[2],subscriptions[t].parts[3],subscriptions[t].parts[4],subscriptions[t].parts[5],subscriptions[t].parts[6],subscriptions[t].parts[7],subscriptions[t].signature).call()
-            }catch(e){
-              console.log(e.toString())
-            }
-            if(dryRun){
-              doSubscription(contract,subscriptions[t])
-            }else{
-              console.log("Even though it says it's ready, the dry run failed. Probably a gas issue... as in the contract is out of Eth or unable to pay the gasPayer can't pay the gasToken")
-            }
+            console.log("subscription says it's ready...........")
+            //let dryRun = false
+            //try{
+            //  dryRun = await contract.methods.executeSubscription(subscriptions[t].parts[0],subscriptions[t].parts[1],subscriptions[t].parts[2],subscriptions[t].parts[3],subscriptions[t].parts[4],subscriptions[t].parts[5],subscriptions[t].parts[6],subscriptions[t].parts[7],subscriptions[t].signature).call()
+            //}catch(e){
+            //  console.log(e.toString())
+            //}
+            //if(dryRun){
+            doSubscription(contract,subscriptions[t])
+            //}else{
+            //  console.log("Even though it says it's ready, the dry run failed. Probably a gas issue... as in the contract is out of Eth or unable to pay the gasPayer can't pay the gasToken")
+            //}
           }else{
             //removesubscription(subscriptions[t].sig)
             console.log("--- not ready -- since they never get removed you may want to figure out a way to trash expired or paused and then add them back when they go active again---")
           }
         }
       });
-    },5000)
+    },10000)
+
 
   })
 }
+
+function removeTransaction(sig){
+  redis.get(transactionListKey, function (err, result) {
+    let transactions
+    try{
+      transactions = JSON.parse(result)
+    }catch(e){transactions = []}
+    if(!transactions) transactions = []
+    let newtransactions = []
+    for(let t in transactions){
+      if(transactions[t].sig!=sig){
+        newtransactions.push(transactions[t])
+      }
+    }
+    redis.set(transactionListKey,JSON.stringify(newtransactions),'EX', 60 * 60 * 24 * 7);
+  });
+}
+
 
 function removeSubscription(sig){
   redis.get(subscriptionListKey, function (err, result) {
@@ -130,8 +183,11 @@ app.get('/clear', (req, res) => {
   console.log("/clear")
   res.set('Content-Type', 'application/json');
   res.end(JSON.stringify({hello:"world"}));
+  redis.set(transactionListKey,JSON.stringify([]),'EX', 60 * 60 * 24 * 7);
   redis.set(subscriptionListKey,JSON.stringify([]),'EX', 60 * 60 * 24 * 7);
 });
+
+
 
 app.get('/', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -182,6 +238,16 @@ app.get('/subcontracts', (req, res) => {
 
 });
 
+app.get('/transactions', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  console.log("/transactions")
+  redis.get(transactionListKey, function (err, result) {
+    res.set('Content-Type', 'application/json');
+    res.end(result);
+  })
+});
+
+
 app.get('/subscriptions', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   console.log("/subscriptions")
@@ -190,6 +256,7 @@ app.get('/subscriptions', (req, res) => {
     res.end(result);
   })
 });
+
 
 app.post('/sign', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -239,6 +306,7 @@ app.post('/deploy', (req, res) => {
   });
 })
 
+
 app.post('/deploysub', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   console.log("/deploy",req.body)
@@ -260,6 +328,29 @@ app.post('/deploysub', (req, res) => {
     res.end(JSON.stringify({contract:contractAddress}));
   });
 })
+
+app.post('/tx', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  console.log("/tx",req.body)
+  let account = web3.eth.accounts.recover(req.body.message,req.body.sig)
+  console.log("RECOVERED:",account)
+  if(account.toLowerCase()==req.body.parts[1].toLowerCase()){
+    console.log("Correct sig... relay transaction to contract... might want more filtering here, but just blindly do it for now")
+    redis.get(transactionListKey, function (err, result) {
+      let transactions
+      try{
+        transactions = JSON.parse(result)
+      }catch(e){contracts = []}
+      if(!transactions) transactions = []
+      console.log("current transactions:",transactions)
+      transactions.push(req.body)
+      console.log("saving transactions:",transactions)
+      redis.set(transactionListKey,JSON.stringify(transactions),'EX', 60 * 60 * 24 * 7);
+    });
+  }
+  res.set('Content-Type', 'application/json');
+  res.end(JSON.stringify({hello:"world"}));
+});
 
 app.post('/saveSubscription', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -284,14 +375,50 @@ app.post('/saveSubscription', (req, res) => {
   res.end(JSON.stringify({hello:"world"}));
 });
 
-app.listen(10002);
-console.log(`http listening on 10002`);
+app.listen(10001);
+console.log(`http listening on 10001`);
+
+
+function doTransaction(contract,txObject){
+  //console.log(contracts.BouncerProxy)
+
+  console.log("Forwarding tx to ",contract._address," with local account ",accounts[3])
+  let txparams = {
+    from: accounts[DESKTOPMINERACCOUNT],
+    gas: txObject.gas,
+    gasPrice:Math.round(4 * 1000000000)
+  }
+
+  //const result = await clevis("contract","forward","BouncerProxy",accountIndexSender,sig,accounts[accountIndexSigner],localContractAddress("Example"),"0",data,rewardAddress,reqardAmount)
+  console.log("TX",txObject.sig,txObject.parts[1],txObject.parts[2],txObject.parts[3],txObject.parts[4],txObject.parts[5],txObject.parts[6],txObject.parts[7])
+  console.log("PARAMS",txparams)
+  contract.methods.forward(txObject.sig,txObject.parts[1],txObject.parts[2],txObject.parts[3],txObject.parts[4],txObject.parts[5],txObject.parts[6],txObject.parts[7]).send(
+  txparams ,(error, transactionHash)=>{
+    console.log("TX CALLBACK",error,transactionHash)
+  })
+  .on('error',(err,receiptMaybe)=>{
+    console.log("TX ERROR",err,receiptMaybe)
+  })
+  .on('transactionHash',(transactionHash)=>{
+    console.log("TX HASH",transactionHash)
+  })
+  .on('receipt',(receipt)=>{
+    console.log("TX RECEIPT",receipt)
+  })
+  /*.on('confirmation', (confirmations,receipt)=>{
+    console.log("TX CONFIRM",confirmations,receipt)
+  })*/
+  .then((receipt)=>{
+    console.log("TX THEN",receipt)
+  })
+}
+
 
 
 function doSubscription(contract,subscriptionObject){
   //console.log(contracts.BouncerProxy)
 
-  console.log("Running subscription on contract ",contract._address," with local account ",accounts[3])
+  console.log("!!!!!!!!!!!!!!!!!!!        ------------ Running subscription on contract ",contract._address," with local account ",accounts[3])
   let txparams = {
     from: accounts[DESKTOPMINERACCOUNT],
     gas: 1000000,
@@ -301,6 +428,7 @@ function doSubscription(contract,subscriptionObject){
   //const result = await clevis("contract","forward","BouncerProxy",accountIndexSender,sig,accounts[accountIndexSigner],localContractAddress("Example"),"0",data,rewardAddress,reqardAmount)
   console.log("subscriptionObject",subscriptionObject.parts[0],subscriptionObject.parts[1],subscriptionObject.parts[2],subscriptionObject.parts[3],subscriptionObject.parts[4],subscriptionObject.parts[5],subscriptionObject.parts[6],subscriptionObject.parts[7],subscriptionObject.signature)
   console.log("PARAMS",txparams)
+  console.log("---========= EXEC ===========-----")
   contract.methods.executeSubscription(subscriptionObject.parts[0],subscriptionObject.parts[1],subscriptionObject.parts[2],subscriptionObject.parts[3],subscriptionObject.parts[4],subscriptionObject.parts[5],subscriptionObject.parts[6],subscriptionObject.parts[7],subscriptionObject.signature).send(
   txparams ,(error, Hash)=>{
     console.log("TX CALLBACK",error,Hash)

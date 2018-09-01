@@ -34,8 +34,6 @@ if(!NETWORK){
 }
 console.log("NETWORK:",NETWORK)
 
-let transactionListKey = "transactionList"+NETWORK
-
 let subscriptionListKey = "subscriptionList"+NETWORK
 
 
@@ -51,14 +49,14 @@ let redis = new Redis({
 })
 
 console.log("LOADING CONTRACTS")
-contracts = ContractLoader(["BouncerProxy","Example","SomeStableToken","Subscription"],web3);
+contracts = ContractLoader(["SomeStableToken","Subscription"],web3);
 
 
 
 //my local geth node takes a while to spin up so I don't want to start parsing until I'm getting real data
 function checkForGeth() {
-  contracts["Example"].methods.count().call({}, function(error, result){
-      console.log("COUNT",error,result)
+  contracts["Subscription"].methods.author().call({}, function(error, result){
+      console.log("AUTHOR (GETH CHECK) ",error,result)
       if(error){
         setTimeout(checkForGeth,15000);
       }else{
@@ -70,33 +68,6 @@ checkForGeth()
 
 function startParsers(){
   web3.eth.getBlockNumber().then((blockNumber)=>{
-
-      console.log("web3.txpool",web3.txpool)
-
-    //parsers here
-    //
-    //
-   setInterval(()=>{
-      console.log("::: TX CHECKER :::: loading transactions from cache...")
-      redis.get(transactionListKey, async (err, result) => {
-        let transactions
-        try{
-          transactions = JSON.parse(result)
-        }catch(e){contracts = []}
-        if(!transactions) transactions = []
-        console.log("current transactions:",transactions.length)
-        for(let t in transactions){
-          console.log("Check Tx:",transactions[t].sig)
-          let contract = new web3.eth.Contract(contracts.BouncerProxy._jsonInterface,transactions[t].parts[0])
-          let ready = await contract.methods.isValidSigAndBlock(transactions[t].sig,transactions[t].parts[1],transactions[t].parts[2],transactions[t].parts[3],transactions[t].parts[4],transactions[t].parts[5],transactions[t].parts[6],transactions[t].parts[7]).call()
-          if(ready){
-            console.log("Transaction is READY ---> ")
-            doTransaction(contract,transactions[t])
-            removeTransaction(transactions[t].sig)
-          }
-        }
-      });
-    },5000)
 
     setInterval(()=>{
       console.log("::: SUBSCRIPTION CHECKER :::: loading subscriptions from cache...")
@@ -143,23 +114,6 @@ function startParsers(){
   })
 }
 
-function removeTransaction(sig){
-  redis.get(transactionListKey, function (err, result) {
-    let transactions
-    try{
-      transactions = JSON.parse(result)
-    }catch(e){transactions = []}
-    if(!transactions) transactions = []
-    let newtransactions = []
-    for(let t in transactions){
-      if(transactions[t].sig!=sig){
-        newtransactions.push(transactions[t])
-      }
-    }
-    redis.set(transactionListKey,JSON.stringify(newtransactions),'EX', 60 * 60 * 24 * 7);
-  });
-}
-
 
 function removeSubscription(sig){
   redis.get(subscriptionListKey, function (err, result) {
@@ -183,7 +137,6 @@ app.get('/clear', (req, res) => {
   console.log("/clear")
   res.set('Content-Type', 'application/json');
   res.end(JSON.stringify({hello:"world"}));
-  redis.set(transactionListKey,JSON.stringify([]),'EX', 60 * 60 * 24 * 7);
   redis.set(subscriptionListKey,JSON.stringify([]),'EX', 60 * 60 * 24 * 7);
 });
 
@@ -236,15 +189,6 @@ app.get('/subcontracts', (req, res) => {
     res.end(result);
   })
 
-});
-
-app.get('/transactions', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  console.log("/transactions")
-  redis.get(transactionListKey, function (err, result) {
-    res.set('Content-Type', 'application/json');
-    res.end(result);
-  })
 });
 
 
@@ -329,28 +273,6 @@ app.post('/deploysub', (req, res) => {
   });
 })
 
-app.post('/tx', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  console.log("/tx",req.body)
-  let account = web3.eth.accounts.recover(req.body.message,req.body.sig)
-  console.log("RECOVERED:",account)
-  if(account.toLowerCase()==req.body.parts[1].toLowerCase()){
-    console.log("Correct sig... relay transaction to contract... might want more filtering here, but just blindly do it for now")
-    redis.get(transactionListKey, function (err, result) {
-      let transactions
-      try{
-        transactions = JSON.parse(result)
-      }catch(e){contracts = []}
-      if(!transactions) transactions = []
-      console.log("current transactions:",transactions)
-      transactions.push(req.body)
-      console.log("saving transactions:",transactions)
-      redis.set(transactionListKey,JSON.stringify(transactions),'EX', 60 * 60 * 24 * 7);
-    });
-  }
-  res.set('Content-Type', 'application/json');
-  res.end(JSON.stringify({hello:"world"}));
-});
 
 app.post('/saveSubscription', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -375,8 +297,8 @@ app.post('/saveSubscription', (req, res) => {
   res.end(JSON.stringify({hello:"world"}));
 });
 
-app.listen(10001);
-console.log(`http listening on 10001`);
+app.listen(10002);
+console.log(`http listening on 10002`);
 
 
 function doTransaction(contract,txObject){

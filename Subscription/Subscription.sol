@@ -52,8 +52,11 @@ contract Subscription is Ownable {
        Call,
        DelegateCall,
        Create
-   }
+    }
 
+    //let's waste some gas and define the author and purpose on chain
+    string public author = "Austin Thomas Griffith - https://austingriffith.com";
+    string public purpose = "EIP 1337 - POC - BYOC";
     constructor() public { }
 
     // contract will need to hold funds to pay gas
@@ -258,7 +261,13 @@ contract Subscription is Ownable {
         // we must do this first to prevent reentrance, but if something fails
         // we will want to roll this back so we need to remember it
         uint256 tempValidTimestamp = nextValidTimestamp[subscriptionHash];
-        nextValidTimestamp[subscriptionHash] = block.timestamp.add(periodSeconds);
+        //increment the next valid period time
+        if(nextValidTimestamp[subscriptionHash]<=0){
+          //if this is the very first, start from the current time
+          nextValidTimestamp[subscriptionHash]=block.timestamp+periodSeconds;
+        }else{
+          nextValidTimestamp[subscriptionHash]=nextValidTimestamp[subscriptionHash]+periodSeconds;
+        }
 
         // now, let's borrow a page out of the Gnosis Safe book and run the execute
         //  give it what ever gas we have minus what we'll need to finish the tx

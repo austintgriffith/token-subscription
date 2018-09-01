@@ -5,12 +5,21 @@ pragma solidity ^0.4.24;
 
    WIP POC simplified version of  EIP-1337 / ERC-948
 
+   BYOC - Subscriber 'Brings Your Own Contract'
+
+   Subscriber deploys their own contract that can be used for a number of
+   different subscriptions. This is a little more complex than the
+   'publisher deploys' model but it is more powerful and flexible too
+
+   //this model of BYOC subscriptions will try to adhere to the ERC948 standards
+   //https://gist.github.com/androolloyd/0a62ef48887be00a5eff5c17f2be849a
+   //big thanks to my dude Andrew Redden @androolloyd
+
    Austin Thomas Griffith - https://austingriffith.com
 
    https://github.com/austintgriffith/token-subscription
 
    Building on previous works:
-    https://gist.github.com/androolloyd/0a62ef48887be00a5eff5c17f2be849a
     https://media.consensys.net/subscription-services-on-the-blockchain-erc-948-6ef64b083a36
     https://medium.com/gitcoin/technical-deep-dive-architecture-choices-for-subscriptions-on-the-blockchain-erc948-5fae89cabc7a
     https://github.com/ethereum/EIPs/pull/1337
@@ -33,6 +42,18 @@ contract Subscription is Ownable {
     using ECRecovery for bytes32;
     using SafeMath for uint256;
 
+    enum SubscriptionStatus {
+        ACTIVE,
+        PAUSED,
+        CANCELLED,
+        EXPIRED
+    }
+    enum Operation {
+       Call,
+       DelegateCall,
+       Create
+   }
+
     constructor() public { }
 
     // contract will need to hold funds to pay gas
@@ -43,46 +64,48 @@ contract Subscription is Ownable {
 
     event Received (address indexed sender, uint value);
     event ExecuteSubscription(
-        address indexed from, //the subscriber
-        address indexed to, //the publisher
-        address tokenAddress, //the token address paid to the publisher
-        uint256 tokenAmount, //the token amount paid to the publisher
+        address from, //the subscriber
+        address to, //the publisher
+        uint256 value, //amount in wei of ether sent from this contract to the to address
+        bytes data, //the encoded transaction data (first four bytes of fn plus args, etc)
+        Operation operation, //ENUM of operation
         uint256 periodSeconds, //the period in seconds between payments
         address gasToken, //the address of the token to pay relayer (0 for eth)
         uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
         address gasPayer //the address that will pay the tokens to the relayer
     );
     event FailedExecuteSubscription(
-        address indexed from, //the subscriber
-        address indexed to, //the publisher
-        address tokenAddress, //the token address paid to the publisher
-        uint256 tokenAmount, //the token amount paid to the publisher
+        address from, //the subscriber
+        address to, //the publisher
+        uint256 value, //amount in wei of ether sent from this contract to the to address
+        bytes data, //the encoded transaction data (first four bytes of fn plus args, etc)
+        Operation operation, //ENUM of operation
         uint256 periodSeconds, //the period in seconds between payments
         address gasToken, //the address of the token to pay relayer (0 for eth)
         uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
         address gasPayer //the address that will pay the tokens to the relayer
     );
-
+    event ContractCreation(address newContract);
 
     // similar to a nonce that avoids replay attacks this allows a single execution
     // every x seconds for a given subscription
     // subscriptionHash  => next valid block number
     mapping(bytes32 => uint256) public nextValidTimestamp;
 
-    // for some cases of delegated execution, this contract will pay a third party
-    // to execute the transfer. If this happens, the owner of this contract must
-    // sign the subscriptionHash
-    mapping(bytes32 => bool) public publisherSigned;
+    // subscription status is tracked by subscription hash
+    mapping(bytes32 => SubscriptionStatus) public status;
 
-    // only the owner of this contract can sign the subscriptionHash to whitelist
-    // a specific subscription to start rewarding the relayers for paying the
-    // gas of the transactions out of the balance of this contract
-    function signSubscriptionHash(bytes32 subscriptionHash)
+
+    // allow for third party metatx account to make transactions through this
+    // contract like an identity but make sure the owner has whitelisted the tx
+    mapping(address => bool) public whitelist;
+    // let the owner add and remove addresses from the whitelist
+    function updateWhitelist(address _account, bool _value)
         public
         onlyOwner
         returns(bool)
     {
-        publisherSigned[subscriptionHash] = true;
+        whitelist[_account] = _value;
         return true;
     }
 
@@ -98,8 +121,13 @@ contract Subscription is Ownable {
         view
         returns (bool)
     {
-        return (block.timestamp >=
-                    nextValidTimestamp[subscriptionHash].add(gracePeriodSeconds)
+        return ( block.timestamp >= nextValidTimestamp[subscriptionHash].add(gracePeriodSeconds) &&
+                  //I'm not sure if we want this or not.. what if the subscriber wants to
+                  // stop paying so they switch the subscription over to paused
+                  // but other smart contracts trigger off of this... we want them
+                  // to continue to be subscribed until the end of the period
+                  // or do we?
+                  status[subscriptionHash] == SubscriptionStatus.ACTIVE
         );
     }
 
@@ -108,8 +136,9 @@ contract Subscription is Ownable {
     function getSubscriptionHash(
         address from, //the subscriber
         address to, //the publisher
-        address tokenAddress, //the token address paid to the publisher
-        uint256 tokenAmount, //the token amount paid to the publisher
+        uint256 value, //amount in wei of ether sent from this contract to the to address
+        bytes data, //the encoded transaction data (first four bytes of fn plus args, etc)
+        Operation operation, //ENUM of operation
         uint256 periodSeconds, //the period in seconds between payments
         address gasToken, //the address of the token to pay relayer (0 for eth)
         uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
@@ -126,8 +155,9 @@ contract Subscription is Ownable {
                 address(this),
                 from,
                 to,
-                tokenAddress,
-                tokenAmount,
+                value,
+                data,
+                operation,
                 periodSeconds,
                 gasToken,
                 gasPrice,
@@ -152,8 +182,9 @@ contract Subscription is Ownable {
     function isSubscriptionReady(
         address from, //the subscriber
         address to, //the publisher
-        address tokenAddress, //the token address paid to the publisher
-        uint256 tokenAmount, //the token amount paid to the publisher
+        uint256 value, //amount in wei of ether sent from this contract to the to address
+        bytes data, //the encoded transaction data (first four bytes of fn plus args, etc)
+        Operation operation, //ENUM of operation
         uint256 periodSeconds, //the period in seconds between payments
         address gasToken, //the address of the token to pay relayer (0 for eth)
         uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
@@ -165,57 +196,39 @@ contract Subscription is Ownable {
         returns (bool)
     {
         bytes32 subscriptionHash = getSubscriptionHash(
-            from, to, tokenAddress, tokenAmount, periodSeconds, gasToken, gasPrice, gasPayer
+            from, to, value, data, operation, periodSeconds, gasToken, gasPrice, gasPayer
         );
         address signer = getSubscriptionSigner(subscriptionHash, signature);
-        uint256 allowance = ERC20(tokenAddress).allowance(from, address(this));
-        return (
-            signer == from &&
-            block.timestamp >= nextValidTimestamp[subscriptionHash] &&
-            allowance >= tokenAmount
-        );
+        return ( validSignerTimestampAndStatus(from, signer, subscriptionHash) );
     }
 
-    // you don't really need this if you are using the approve/transferFrom method
-    // because you control the flow of tokens by approving this contract address,
-    // but to make the contract an extensible example for later user I'll add this
-    function cancelSubscription(
-        address from, //the subscriber
-        address to, //the publisher
-        address tokenAddress, //the token address paid to the publisher
-        uint256 tokenAmount, //the token amount paid to the publisher
-        uint256 periodSeconds, //the period in seconds between payments
-        address gasToken, //the address of the token to pay relayer (0 for eth)
-        uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
-        address gasPayer, //the address that will pay the tokens to the relayer
-        bytes signature //proof the subscriber signed the meta trasaction
+    //check if a subscription is signed correctly and the timestamp is ready for
+    // the next execution to happen
+    function validSignerTimestampAndStatus(
+        address from,
+        address signer,
+        bytes32 subscriptionHash
     )
         public
-        returns (bool success)
+        view
+        returns (bool)
     {
-        bytes32 subscriptionHash = getSubscriptionHash(
-            from, to, tokenAddress, tokenAmount, periodSeconds, gasToken, gasPrice, gasPayer
+        return (
+            signer == from &&
+            ( from==owner || whitelist[from] ) && //only authenticated accounts can exec
+            block.timestamp >= nextValidTimestamp[subscriptionHash] &&
+            status[subscriptionHash] == SubscriptionStatus.ACTIVE
         );
-        address signer = subscriptionHash.toEthSignedMessageHash().recover(signature);
-
-        //the signature must be valid
-        require(signer == from, "Invalid Signature for subscription cancellation");
-
-        //since we can't underflow (SAFEMATH!), we'll just set it to a large number
-        nextValidTimestamp[subscriptionHash]=99999999999; //subscription will become valid again Wednesday, November 16, 5138 9:46:39 AM
-        //at this point the nextValidTimestamp should be a timestamp that will never
-        //be reached during the brief window human existence
-
-        return true;
     }
 
-    // execute the transferFrom to pay the publisher from the subscriber
-    // the subscriber has full control by approving this contract an allowance
+
+    // execute the operation
     function executeSubscription(
         address from, //the subscriber
         address to, //the publisher
-        address tokenAddress, //the token address paid to the publisher
-        uint256 tokenAmount, //the token amount paid to the publisher
+        uint256 value, //amount in wei of ether sent from this contract to the to address
+        bytes data, //the encoded transaction data (first four bytes of fn plus args, etc)
+        Operation operation, //ENUM of operation
         uint256 periodSeconds, //the period in seconds between payments
         address gasToken, //the address of the token to pay relayer (0 for eth)
         uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
@@ -228,103 +241,130 @@ contract Subscription is Ownable {
         // make sure the subscription is valid and ready
         // pulled this out so I have the hash, should be exact code as "isSubscriptionReady"
         bytes32 subscriptionHash = getSubscriptionHash(
-            from, to, tokenAddress, tokenAmount, periodSeconds, gasToken, gasPrice, gasPayer
+            from, to, value, data, operation, periodSeconds, gasToken, gasPrice, gasPayer
         );
         address signer = getSubscriptionSigner(subscriptionHash, signature);
 
         //the signature must be valid
-        require(signer == from, "Invalid Signature");
-        //timestamp must be equal to or past the next period
+        // had to put this in one function because the stack was too deep
         require(
-            block.timestamp >= nextValidTimestamp[subscriptionHash],
-            "Subscription is not ready"
+          validSignerTimestampAndStatus(from,signer,subscriptionHash),
+          "Signature, From Account, Timestamp, or status is invalid"
         );
 
 
 
-
-
         // increment the next valid period time
-        //if (nextValidTimestamp[subscriptionHash] == 0) {
+        // we must do this first to prevent reentrance, but if something fails
+        // we will want to roll this back so we need to remember it
+        uint256 tempValidTimestamp = nextValidTimestamp[subscriptionHash];
+        nextValidTimestamp[subscriptionHash] = block.timestamp.add(periodSeconds);
 
-            //I changed this to always use the timestamp
-            // this means desktop miners MUST submit transactions as fast as possible
-            // or subscriptions will start to lag
-            // the upside of doing it this way is the approve/allowance of the erc20
-            // can now pause and restart the subscription whenever they want
-            nextValidTimestamp[subscriptionHash] = block.timestamp.add(periodSeconds);
-
-            //if you would like your subscription to be able to submit multiple months
-            // all at once, switch back to the uncommented method, but if the subscriber
-            // pauses the allowance and then later approves... a bunch of funds can all
-            // move at once as you work through past months of unpaid subscriptions
-
-
-        //} else {
-        //      nextValidTimestamp[subscriptionHash] =
-        //        nextValidTimestamp[subscriptionHash].add(periodSeconds);
-        //}
-
-        // now, let make the transfer from the subscriber to the publisher
-        bool result = ERC20(tokenAddress).transferFrom(from,to,tokenAmount);
+        // now, let's borrow a page out of the Gnosis Safe book and run the execute
+        //  give it what ever gas we have minus what we'll need to finish the tx
+        //  and pay the desktop miner
+        bool result = execute(to, value, data, operation, gasleft() - 48000); // 48000 = TOTAL GUESS RIGHT NOW (TODO: FIGURE OUT HOW MUCH GAS IS USED AFTER THIS AND HARD CODE IT HERE)
         if (result) {
             emit ExecuteSubscription(
-                from, to, tokenAddress, tokenAmount, periodSeconds, gasToken, gasPrice, gasPayer
+                from, to, value, data, operation, periodSeconds, gasToken, gasPrice, gasPayer
             );
-        } else {
-            emit FailedExecuteSubscription(
-                from, to, tokenAddress, tokenAmount, periodSeconds, gasToken, gasPrice, gasPayer
-            );
-        }
 
-        // it is possible for the subscription execution to be run by a third party
-        // incentivized in the terms of the subscription with a gasToken and gasPrice
-        // pay that out now...
-        if (gasPrice > 0) {
-            if (gasToken == address(0)) {
-                // this is an interesting case where the service will pay the third party
-                // ethereum out of the subscription contract itself
-                // for this to work the publisher must send ethereum to the contract
-                require(
-                    from == owner || publisherSigned[subscriptionHash],
-                    "Publisher has not signed this subscriptionHash"
-                );
+            //we only want to reward the miner if the transaction was a success
+            // if we reward either way, there is an attack vector where the
+            // desktop miner can repeatedly execute the metatx and earn gas
+            // without the timestamp incrementing or the tx executing successful
 
-                require(msg.sender.call.value(gasPrice).gas(36000)(),//still unsure about how much gas to use here
+            // it is possible for the subscription execution to be run by a third party
+            // incentivized in the terms of the subscription with a gasToken and gasPrice
+            // pay that out now...
+            if (gasPrice > 0) {
+                if (gasToken == address(0)) {
+                    // this is a case where the subscriber will pay for the tx using
+                    // ethereum out of the subscription contract itself
+                    // for this to work the publisher must send ethereum to the contract
+                    require(msg.sender.call.value(gasPrice).gas(36000)(),//still unsure about how much gas to use here
                         "Subscription contract failed to pay ether to relayer"
-                );
-            } else if (gasPayer == address(this) || gasPayer == address(0)) {
-                // in this case, this contract will pay a token to the relayer to
-                // incentivize them to pay the gas for the meta transaction
-                // for security, the publisher must have signed the subscriptionHash
-                require(from == owner || publisherSigned[subscriptionHash],
-                        "Publisher has not signed this subscriptionHash"
-                );
-
-                require(ERC20(gasToken).transfer(msg.sender, gasPrice),
+                    );
+                } else if (gasPayer == address(this) || gasPayer == address(0)) {
+                    // in this case, this contract will pay a token to the relayer to
+                    // incentivize them to pay the gas for the meta transaction
+                    require(ERC20(gasToken).transfer(msg.sender, gasPrice),
                         "Failed to pay gas as contract"
-                );
-            } else if (gasPayer == from) {
-                // in this case the relayer is paid with a token from the subscriber
-                // this works best if it is the same token being transferred to the
-                // publisher because it is already in the allowance
-                require(
-                    ERC20(gasToken).transferFrom(from, msg.sender, gasPrice),
-                    "Failed to pay gas as from account"
-                );
-            } else {
-                // the subscriber could craft the gasPayer to be a fellow subscriber that
-                // that has approved this contract to move tokens and then exploit that
-                // don't allow that...
-                revert("The gasPayer is invalid");
-                // on the other hand it might be really cool to allow *any* account to
-                // pay the third party as long as they have approved this contract
-                // AND the publisher has signed off on it. The downside would be a
-                // publisher not paying attention and signs a subscription that attacks
-                // a different subscriber
+                    );
+                } else {
+                    // if all else fails, we expect that some account (CAN BE ANY ACCOUNT)
+                    // has approved this contract to move tokens on their behalf
+                    // this is really cool because the subscriber, the publisher, OR any
+                    // third party could reward the relayers with an approved token
+                    require(
+                        ERC20(gasToken).transferFrom(gasPayer, msg.sender, gasPrice),
+                        "Failed to pay gas in tokens from approved gasPayer"
+                    );
+                }
             }
+
+        } else {
+
+            //if the transaction is not successful, we want to roll back the timestamp so
+            // we can try again soon
+            nextValidTimestamp[subscriptionHash] = tempValidTimestamp;
+
+            emit FailedExecuteSubscription(
+                from, to, value, data, operation, periodSeconds, gasToken, gasPrice, gasPayer
+            );
         }
 
         return result;
+    }
+
+
+
+    // Gnosis Safe is the dopest but it has a lot of functionality we dont need
+    // let's borrow their executor for different operations here
+    // all the love and props go to *** rmeissner ***
+    // https://github.com/gnosis/safe-contracts/blob/development/contracts/base/Executor.sol
+    function execute(address to, uint256 value, bytes data, Operation operation, uint256 txGas)
+       internal
+       returns (bool success)
+    {
+       if (operation == Operation.Call)
+           success = executeCall(to, value, data, txGas);
+       else if (operation == Operation.DelegateCall)
+           success = executeDelegateCall(to, data, txGas);
+       else {
+           address newContract = executeCreate(data);
+           success = newContract != 0;
+           emit ContractCreation(newContract);
+       }
+    }
+
+    function executeCall(address to, uint256 value, bytes data, uint256 txGas)
+       internal
+       returns (bool success)
+    {
+       // solium-disable-next-line security/no-inline-assembly
+       assembly {
+           success := call(txGas, to, value, add(data, 0x20), mload(data), 0, 0)
+       }
+    }
+
+    function executeDelegateCall(address to, bytes data, uint256 txGas)
+       internal
+       returns (bool success)
+    {
+       // solium-disable-next-line security/no-inline-assembly
+       assembly {
+           success := delegatecall(txGas, to, add(data, 0x20), mload(data), 0, 0)
+       }
+    }
+
+    function executeCreate(bytes data)
+       internal
+       returns (address newContract)
+    {
+       // solium-disable-next-line security/no-inline-assembly
+       assembly {
+           newContract := create(0, add(data, 0x20), mload(data))
+       }
     }
 }

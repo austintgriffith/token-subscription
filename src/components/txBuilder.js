@@ -169,10 +169,9 @@ class TxBuilder extends Component {
           let extra = ""
           if(input.type=="uint256"){
             extra = (
-              <select name={key+"adjust"} value={this.state[key+"adjust"]} onChange={this.handleInput.bind(this)} >
-                <option key="none" value=""></option>
-                <option key="18" value={"*10^18"}>{"*10^18"}</option>
-              </select>
+              <button onClick={()=>{
+                this.handleInput({target:{name:key,value:this.state[key]*10**18}})
+              }}>{"*10^18"}</button>
             )
           }else if(input.type=="address"&&this.state[key]){
             extra = (

@@ -489,7 +489,7 @@ contract Subscription is Ownable {
        Create
     }
 
-    //let's waste some gas and define the author and purpose on chain
+    // let's waste some gas and define the author and purpose on chain
     string public author = "Austin Thomas Griffith - https://austingriffith.com";
     string public purpose = "EIP 1337 - POC - BYOC";
     constructor() public { }
@@ -531,7 +531,11 @@ contract Subscription is Ownable {
     mapping(bytes32 => uint256) public nextValidTimestamp;
 
     // subscription status is tracked by subscription hash
-    mapping(bytes32 => SubscriptionStatus) public status;
+    mapping(bytes32 => SubscriptionStatus) public subscriptionStatus;
+
+    // since owners can update the subscriptionStatus with a metaTx, we'll
+    // need a nonce to avoid replay attacks
+    mapping(bytes32 => uint256) public subscriptionStatusNonce;
 
 
     // allow for third party metatx account to make transactions through this
@@ -548,10 +552,10 @@ contract Subscription is Ownable {
     }
 
     // this is used by external smart contracts to verify on-chain that a
-    // particular subscription is "paid" and "active"
+    // particular subscription is "paid" (has executed within the period)
     // there must be a small grace period added to allow the publisher
     // or desktop miner to execute
-    function isSubscriptionActive(
+    function isSubscriptionPaid(
         bytes32 subscriptionHash,
         uint256 gracePeriodSeconds
     )
@@ -559,14 +563,21 @@ contract Subscription is Ownable {
         view
         returns (bool)
     {
-        return ( block.timestamp >= nextValidTimestamp[subscriptionHash].add(gracePeriodSeconds) &&
-                  //I'm not sure if we want this or not.. what if the subscriber wants to
-                  // stop paying so they switch the subscription over to paused
-                  // but other smart contracts trigger off of this... we want them
-                  // to continue to be subscribed until the end of the period
-                  // or do we?
-                  status[subscriptionHash] == SubscriptionStatus.ACTIVE
-        );
+        return ( block.timestamp >= nextValidTimestamp[subscriptionHash].add(gracePeriodSeconds) );
+    }
+
+    // this is used for checking what status the owner has switching it to
+    // this is for checking if the owner has moved it to paused even if it
+    // is already paid, this can signal that they no longer want to pay the
+    // next pay period
+    function getSubscriptionStatus(
+        bytes32 subscriptionHash
+    )
+        public
+        view
+        returns  (uint256)
+    {
+        return uint256(subscriptionStatus[subscriptionHash]);
     }
 
     // given the subscription details, generate a hash and try to kind of follow
@@ -600,10 +611,11 @@ contract Subscription is Ownable {
                 gasToken,
                 gasPrice,
                 gasPayer
-        ));
+            )
+        );
     }
 
-    //ecrecover the signer from hash and the signature
+    // ecrecover the signer from hash and the signature
     function getSubscriptionSigner(
         bytes32 subscriptionHash, //hash of subscription
         bytes signature //proof the subscriber signed the meta trasaction
@@ -615,7 +627,7 @@ contract Subscription is Ownable {
         return subscriptionHash.toEthSignedMessageHash().recover(signature);
     }
 
-    //check if a subscription is signed correctly and the timestamp is ready for
+    // check if a subscription is signed correctly and the timestamp is ready for
     // the next execution to happen
     function isSubscriptionReady(
         address from, //the subscriber
@@ -637,12 +649,12 @@ contract Subscription is Ownable {
             from, to, value, data, operation, periodSeconds, gasToken, gasPrice, gasPayer
         );
         address signer = getSubscriptionSigner(subscriptionHash, signature);
-        return ( validSignerTimestampAndStatus(from, signer, subscriptionHash) );
+        return ( isValidSignerTimestampAndStatus(from, signer, subscriptionHash) );
     }
 
-    //check if a subscription is signed correctly and the timestamp is ready for
+    // check if a subscription is signed correctly and the timestamp is ready for
     // the next execution to happen
-    function validSignerTimestampAndStatus(
+    function isValidSignerTimestampAndStatus(
         address from,
         address signer,
         bytes32 subscriptionHash
@@ -653,14 +665,77 @@ contract Subscription is Ownable {
     {
         return (
             signer == from &&
-            ( from==owner || whitelist[from] ) && //only authenticated accounts can exec
+            ( signer == owner || whitelist[signer] ) && //only authenticated accounts can exec
             block.timestamp >= nextValidTimestamp[subscriptionHash] &&
-            status[subscriptionHash] == SubscriptionStatus.ACTIVE
+            subscriptionStatus[subscriptionHash] == SubscriptionStatus.ACTIVE
         );
     }
 
+    // to modify the status, an owner or whitelisted account needs to sign
+    // the hash of the change to send it as a meta tx
+    function getModifyStatusHash(
+        bytes32 subscriptionHash,
+        SubscriptionStatus status
+    )
+        public
+        view
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encodePacked(
+                byte(0x19),
+                byte(0),
+                address(this),
+                subscriptionHash,
+                status,
+                subscriptionStatusNonce[subscriptionHash]
+            )
+        );
+    }
 
-    // execute the operation
+    // check if a subscription is signed correctly and the timestamp is ready for
+    // the next execution to happen
+    function isValidModifyStatusSigner(
+        bytes32 subscriptionHash,
+        SubscriptionStatus status,
+        bytes signature
+    )
+        public
+        view
+        returns (bool)
+    {
+        address signer = getModifyStatusHash(subscriptionHash, status).toEthSignedMessageHash().recover(signature);
+        return (
+            ( signer==owner || whitelist[signer] ) &&
+            //once the status is expired or cancelled, it can no longer change 
+            ( subscriptionStatus[subscriptionHash] == SubscriptionStatus.ACTIVE || subscriptionStatus[subscriptionHash] == SubscriptionStatus.PAUSED )
+        );
+    }
+
+    // the owner or any of the whitelisted accounts can sign the meta tx to
+    // modify the transaction
+    function modifyStatus(
+        bytes32 subscriptionHash,
+        SubscriptionStatus status,
+        bytes signature
+    )
+        public
+        returns (bool)
+    {
+        require(
+            isValidModifyStatusSigner(subscriptionHash, status, signature),
+            "Invalid modify status signature"
+        );
+        subscriptionStatusNonce[subscriptionHash]++;
+        subscriptionStatus[subscriptionHash] = status;
+        return true;
+    }
+
+    // execute the operation through delegated execution and reward the miner
+    // this function will also increment the timestamp nonce to the next value
+    // in which it will be valid
+    // we tried to make our execution just like Gnosis Safe so the metatx
+    // networks can be similar or even the same
     function executeSubscription(
         address from, //the subscriber
         address to, //the publisher
@@ -674,7 +749,7 @@ contract Subscription is Ownable {
         bytes signature //proof the subscriber signed the meta trasaction
     )
         public
-        returns (bool success)
+        returns (bool)
     {
         // make sure the subscription is valid and ready
         // pulled this out so I have the hash, should be exact code as "isSubscriptionReady"
@@ -686,7 +761,7 @@ contract Subscription is Ownable {
         //the signature must be valid
         // had to put this in one function because the stack was too deep
         require(
-          validSignerTimestampAndStatus(from,signer,subscriptionHash),
+          isValidSignerTimestampAndStatus(from,signer,subscriptionHash),
           "Signature, From Account, Timestamp, or status is invalid"
         );
 

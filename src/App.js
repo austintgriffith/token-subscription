@@ -159,24 +159,24 @@ class App extends Component {
      console.log(
        this.state.account,
        this.state.toAddress,
-       value*10**18,
+       value,
        txData,
        operation,
        periodSeconds,
        gasToken,
-       gasPrice*10**18,
+       gasPrice,
        gasPayer,
      )
 
     const parts = [
       this.state.account,
       this.state.toAddress,
-      web3.utils.toTwosComplement(value*10**18),
+      web3.utils.toTwosComplement(value),
       txData,
       web3.utils.toTwosComplement(operation),
       web3.utils.toTwosComplement(periodSeconds),
       gasToken,
-      web3.utils.toTwosComplement(gasPrice*10**18),
+      web3.utils.toTwosComplement(gasPrice),
       gasPayer,
     ]
     /*web3.utils.padLeft("0x"+nonce,64),*/
@@ -440,7 +440,9 @@ class App extends Component {
                 With Value:<input
                     style={{verticalAlign:"middle",width:400,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
                     type="text" name="value" value={this.state.value} onChange={this.handleInput.bind(this)}
-                />
+                /><button onClick={()=>{
+                  this.handleInput({target:{name:'value',value:this.state['value']*10**18}})
+                }}>{"*10^18"}</button>
                 </div>
 
                 <div style={{margin:0,border:"1px solid #55555",backgroundColor:"#393939",padding:10}}>
@@ -463,7 +465,9 @@ class App extends Component {
                   Gas Price:<input
                       style={{verticalAlign:"middle",width:400,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
                       type="text" name="gasPrice" value={this.state.gasPrice} onChange={this.handleInput.bind(this)}
-                  />
+                  /><button onClick={()=>{
+                    this.handleInput({target:{name:'gasPrice',value:this.state['gasPrice']*10**18}})
+                  }}>{"*10^18"}</button>
                   </div>
                   <div>
                   Gas Payer:<input

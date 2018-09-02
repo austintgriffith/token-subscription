@@ -38,12 +38,18 @@ class App extends Component {
       data: getParams.data,
       currentTokenApproval: 0,
       currentTokenBalance: 0,
+      value:getParams.value,
       gasPayer:getParams.gasPayer,
       gasPrice:getParams.gasPrice,
       gasToken:getParams.gasToken,
       functionName:getParams.functionName,
       url: "",
-      contract: false
+      contract: false,
+      sigs: [],
+      whitelistValue: "true",
+      purpose: "Connecting...",
+      author:"",
+      version:0,
     }
     for(let c=1;c<9;c++){
       this.state['functionArg'+c] = getParams['functionArg'+c];
@@ -82,6 +88,23 @@ class App extends Component {
     this.setState(update)
   }
   async poll() {
+    console.log("Loading Sigs From "+backendUrl+"...")
+    axios.get(backendUrl+"sigs/"+this.state.subscriptionContract._address)
+    .then((response)=>{
+      //console.log(response)
+      this.setState({sigs:response.data})
+    })
+    .catch((error)=>{
+      console.log(error);
+    });
+    if(this.state.subscriptionContract&&this.state.subscriptionContract.purpose){
+      this.setState({purpose:await this.state.subscriptionContract.purpose().call(),
+        author:await this.state.subscriptionContract.author().call(),
+        version:await this.state.subscriptionContract.version().call()
+      })
+    }
+
+
     if(this.state&& this.state.subscriptionContract){
       let subscriptionContractOwner = await this.state.subscriptionContract.owner().call()
       this.setState({subscriptionContractOwner:subscriptionContractOwner})
@@ -205,6 +228,30 @@ class App extends Component {
       console.log(error);
     });
   }
+  async signContract() {
+    let timestamp = Date.now()
+    let message = ""+this.state.account+" trusts subscription proxy "+this.state.subscriptionContract._address+" at "+timestamp
+    console.log("sign",message)
+    let sig = await this.state.web3.eth.personal.sign(message, this.state.account)
+    console.log("SIG",sig)
+    let data = JSON.stringify({
+      address:this.state.subscriptionContract._address,
+      account:this.state.account,
+      timestamp:timestamp,
+      message:message,
+      sig:sig
+    })
+    axios.post(backendUrl+'sign', data, {
+      headers: {
+          'Content-Type': 'application/json',
+      }
+    }).then((response)=>{
+      console.log("SIGN SIG",response)
+    })
+    .catch((error)=>{
+      console.log(error);
+    });
+  }
   render() {
     let {web3,account,contracts,tx,gwei,block,avgBlockTime,etherscan,subscriptionContract} = this.state
     let connectedDisplay = []
@@ -319,7 +366,7 @@ class App extends Component {
             </div>
           )
 
-          if(this.state.timeType && this.state.timeAmount && this.state.toAddress && this.state.toAddress.length==42 ){
+          if(this.state.timeType && this.state.timeAmount && ((this.state.toAddress && this.state.toAddress.length==42) || this.state.operation == 2) ){
             subscribeButton = (
               <div>
                 <Button color={"green"} size="2" onClick={()=>{
@@ -364,22 +411,22 @@ class App extends Component {
               />
             )
             txbuilder = (
-              <TxBuilder {...this.state} onUpdate={update => {
-                console.log("TXBUILDER UPDATE",update)
-                this.setState(update)
-              }}/>
+              <TxBuilder {...this.state}
+                contractAddress={this.state.toAddress}
+                backendUrl={backendUrl}
+                onUpdate={update => {
+                  console.log("TXBUILDER UPDATE",update)
+                  this.setState(update)
+                }
+              }/>
             )
           }
 
           let buttonDisplay = ""
-          let subscriberView = ""
+          let subscriberView = (
+            <Subscriptions backendUrl={backendUrl} {...this.state}/>
+          )
 
-          let isSubscriptionContractOwner = (this.state.subscriptionContractOwner && this.state.account && this.state.subscriptionContractOwner.toLowerCase()==this.state.account.toLowerCase())
-          if(isSubscriptionContractOwner){
-            subscriberView = (
-              <Subscriptions backendUrl={backendUrl} {...this.state}/>
-            )
-          }
           buttonDisplay = (
             <div>
               {subscribeButton}
@@ -389,11 +436,17 @@ class App extends Component {
           contractsDisplay.push(
             <div key="UI" style={{padding:30}}>
               <div style={{padding:20}}>
-                <a href="/">EIP 1337 - Delegate Call Subscriptions POC - (BYOC)</a> -   <Button onClick={()=>{
+                <a href="/">{this.state.purpose}<Button onClick={()=>{
                     window.location = "https://github.com/austintgriffith/token-subscription"
                   }}>
                   LEARN MORE
                   </Button>
+                </a>
+                <div style={{marginBottom:20}}>
+                  <a href="https://austingriffith.com">
+                    {this.state.author} [v{this.state.version}]
+                  </a>
+                </div>
                 <div>
                   <Address
                     {...this.state}
@@ -407,7 +460,7 @@ class App extends Component {
 
               <div style={{padding:20}}>
                 <div style={{fontSize:40,padding:20}}>
-                  Create Delegated Execution Subscription
+                  Create Subscription
                 </div>
 
                 <div>
@@ -429,7 +482,7 @@ class App extends Component {
                 </div>
 
                 <div>
-                On Contract Address:<input
+                To Address:<input
                     style={{verticalAlign:"middle",width:400,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
                     type="text" name="toAddress" value={this.state.toAddress} onChange={this.handleInput.bind(this)}
                 />
@@ -496,9 +549,40 @@ class App extends Component {
               <Events
                 config={{hide:false,DEBUG:false}}
                 contract={subscriptionContract}
-                eventName={"FailedExecuteSubscription"}
+                eventName={"ContractCreation"}
                 block={block}
-                /*filter={{to:this.state.account}}*/
+                /*filter={{from:this.state.account}}*/
+                onUpdate={(eventData,allEvents)=>{
+                  console.log("EVENT DATA:",eventData)
+                  this.setState({events:allEvents})
+                }}
+              />
+
+
+              <input
+                  style={{verticalAlign:"middle",width:300,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
+                  type="text" name="whitelistAddress" value={this.state.whitelistAddress} onChange={this.handleInput.bind(this)}
+              />
+              <Blockie address={this.state.whitelistAddress||""} />
+              <select name="whitelistValue" value={this.state.whitelistValue} onChange={this.handleInput.bind(this)} >
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select><Button onClick={()=>{
+                console.log("UPDATE WHITELIST",this.state.whitelistAddress,this.state.whitelistValue)
+                tx(
+                  this.state.subscriptionContract.updateWhitelist(this.state.whitelistAddress,this.state.whitelistValue),
+                )
+              }}>
+                Save
+              </Button>
+
+
+              <Events
+                config={{hide:false,DEBUG:false}}
+                contract={subscriptionContract}
+                eventName={"UpdateWhitelist"}
+                block={block}
+                /*filter={{from:this.state.account}}*/
                 onUpdate={(eventData,allEvents)=>{
                   console.log("EVENT DATA:",eventData)
                   this.setState({events:allEvents})
@@ -506,6 +590,31 @@ class App extends Component {
               />
 
               <Miner backendUrl={backendUrl} {...this.state} />
+            </div>
+          )
+
+          let sigs = []
+          //console.log("this.state.sigs",this.state.sigs)
+          if(this.state.sigs){
+            sigs = this.state.sigs.map((sig)=>{
+              return (
+                <span key={"sig"+sig} style={{padding:3,cursor:"pointer"}} onClick={()=>{
+                  console.log("ENTER WHITELIST ADDRESS",sig)
+                  this.setState({whitelistAddress:sig})
+                }}>
+                  <Blockie address={sig} config={{size:5}} />
+                </span>
+              )
+            })
+          }
+          contractsDisplay.push(
+            <div style={{padding:20}}>
+              <div style={{padding:10}}>
+                {sigs}
+              </div>
+              <Button size="2" onClick={this.signContract.bind(this)}>
+                Sign Contract
+              </Button>
             </div>
           )
         }
@@ -548,6 +657,7 @@ class App extends Component {
         </div>
       )
     }
+
 
     return (
       <div className="App">

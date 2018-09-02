@@ -1,9 +1,10 @@
 pragma solidity ^0.4.24;
 
 /*
-   Token Subscriptions on the Blockchain
 
-   WIP POC simplified version of  EIP-1337 / ERC-948
+   Delegated Execution Subscriptions for Ethereum
+
+   WIP POC - EIP-1337 / ERC-948
 
    BYOC - Subscriber 'Brings Your Own Contract'
 
@@ -17,7 +18,8 @@ pragma solidity ^0.4.24;
 
    Austin Thomas Griffith - https://austingriffith.com
 
-   https://github.com/austintgriffith/token-subscription
+   Branched from:
+    https://github.com/austintgriffith/token-subscription
 
    Building on previous works:
     https://media.consensys.net/subscription-services-on-the-blockchain-erc-948-6ef64b083a36
@@ -25,6 +27,7 @@ pragma solidity ^0.4.24;
     https://github.com/ethereum/EIPs/pull/1337
     https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1077.md
     https://github.com/gnosis/safe-contracts
+    https://github.com/ethereum/EIPs/issues/1228
 
   Earlier Meta Transaction Demo:
     https://github.com/austintgriffith/bouncer-proxy
@@ -55,8 +58,8 @@ contract Subscription is Ownable {
     }
 
     // let's waste some gas and define the author and purpose on chain
+    string public purpose = "Delegated Execution Subscriptions (POC) [EIP1337/948]";
     string public author = "Austin Thomas Griffith - https://austingriffith.com";
-    string public purpose = "EIP 1337 - POC - BYOC";
     constructor() public { }
 
     // contract will need to hold funds to pay gas
@@ -77,18 +80,8 @@ contract Subscription is Ownable {
         uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
         address gasPayer //the address that will pay the tokens to the relayer
     );
-    event FailedExecuteSubscription(
-        address from, //the subscriber
-        address to, //the publisher
-        uint256 value, //amount in wei of ether sent from this contract to the to address
-        bytes data, //the encoded transaction data (first four bytes of fn plus args, etc)
-        Operation operation, //ENUM of operation
-        uint256 periodSeconds, //the period in seconds between payments
-        address gasToken, //the address of the token to pay relayer (0 for eth)
-        uint256 gasPrice, //the amount of tokens or eth to pay relayer (0 for free)
-        address gasPayer //the address that will pay the tokens to the relayer
-    );
     event ContractCreation(address newContract);
+    event UpdateWhitelist(address account, bool value);
 
     // similar to a nonce that avoids replay attacks this allows a single execution
     // every x seconds for a given subscription
@@ -113,6 +106,7 @@ contract Subscription is Ownable {
         returns(bool)
     {
         whitelist[_account] = _value;
+        emit UpdateWhitelist(_account,whitelist[_account]);
         return true;
     }
 
@@ -272,7 +266,7 @@ contract Subscription is Ownable {
         address signer = getModifyStatusHash(subscriptionHash, status).toEthSignedMessageHash().recover(signature);
         return (
             ( signer==owner || whitelist[signer] ) &&
-            //once the status is expired or cancelled, it can no longer change 
+            //once the status is expired or cancelled, it can no longer change
             ( subscriptionStatus[subscriptionHash] == SubscriptionStatus.ACTIVE || subscriptionStatus[subscriptionHash] == SubscriptionStatus.PAUSED )
         );
     }
@@ -292,6 +286,18 @@ contract Subscription is Ownable {
             "Invalid modify status signature"
         );
         subscriptionStatusNonce[subscriptionHash]++;
+        // if this subscription is getting unpaused (PAUSED -> ACTIVE) we need to check
+        // to see if more time than the periodSeconds has elapsed ... this means that
+        // without any changes, multiple executions could happen and we need to fast
+        // forward the nextValidTimestamp to now ...
+        // ex: they pause for 3 months and then make it active again... you don't want
+        //   it to be able to submit 3 transactions right away, just one
+        if( subscriptionStatus[subscriptionHash] == SubscriptionStatus.PAUSED &&
+          status == SubscriptionStatus.ACTIVE &&
+          block.timestamp > nextValidTimestamp[subscriptionHash] )
+        {
+          nextValidTimestamp[subscriptionHash] = block.timestamp;
+        }
         subscriptionStatus[subscriptionHash] = status;
         return true;
     }
@@ -330,13 +336,8 @@ contract Subscription is Ownable {
           "Signature, From Account, Timestamp, or status is invalid"
         );
 
-
-
         // increment the next valid period time
-        // we must do this first to prevent reentrance, but if something fails
-        // we will want to roll this back so we need to remember it
-        uint256 tempValidTimestamp = nextValidTimestamp[subscriptionHash];
-        //increment the next valid period time
+        // we must do this first to prevent reentrance
         if(nextValidTimestamp[subscriptionHash]<=0){
           //if this is the very first, start from the current time
           nextValidTimestamp[subscriptionHash]=block.timestamp+periodSeconds;
@@ -344,63 +345,51 @@ contract Subscription is Ownable {
           nextValidTimestamp[subscriptionHash]=nextValidTimestamp[subscriptionHash]+periodSeconds;
         }
 
+        // -- Reward Desktop Miner (Relayer/Operator)
+        // it is possible for the subscription execution to be run by a third party
+        // incentivized in the terms of the subscription with a gasToken and gasPrice
+        // pay that out now...
+        if (gasPrice > 0) {
+            if (gasToken == address(0)) {
+                // this is a case where the subscriber will pay for the tx using
+                // ethereum out of the subscription contract itself
+                // for this to work the subscriber must send ethereum to the contract
+                require(msg.sender.call.value(gasPrice).gas(36000)(),//still unsure about how much gas to use here
+                    "Subscription contract failed to pay ether to relayer"
+                );
+            } else if (gasPayer == address(this) || gasPayer == address(0)) {
+                // in this case, this contract will pay a token to the relayer to
+                // incentivize them to pay the gas for the meta transaction
+                require(ERC20(gasToken).transfer(msg.sender, gasPrice),
+                    "Failed to pay gas as contract"
+                );
+            } else {
+                // if all else fails, we expect that some account (CAN BE ANY ACCOUNT)
+                // has approved this contract to move tokens on their behalf
+                // this is really cool because the subscriber, the publisher, OR any
+                // third party could reward the relayers with an approved token
+                require(
+                    ERC20(gasToken).transferFrom(gasPayer, msg.sender, gasPrice),
+                    "Failed to pay gas in tokens from approved gasPayer"
+                );
+            }
+        }
+
+        //Emit event
+        emit ExecuteSubscription(
+          from, to, value, data, operation, periodSeconds, gasToken, gasPrice, gasPayer
+        );
+
         // now, let's borrow a page out of the Gnosis Safe book and run the execute
         //  give it what ever gas we have minus what we'll need to finish the tx
         //  and pay the desktop miner
-        bool result = execute(to, value, data, operation, gasleft() - 48000); // 48000 = TOTAL GUESS RIGHT NOW (TODO: FIGURE OUT HOW MUCH GAS IS USED AFTER THIS AND HARD CODE IT HERE)
-        if (result) {
-            emit ExecuteSubscription(
-                from, to, value, data, operation, periodSeconds, gasToken, gasPrice, gasPayer
-            );
+        require(
+          execute(to, value, data, operation, gasleft()),
+          "Failed to execute subscription"
+        );
 
-            //we only want to reward the miner if the transaction was a success
-            // if we reward either way, there is an attack vector where the
-            // desktop miner can repeatedly execute the metatx and earn gas
-            // without the timestamp incrementing or the tx executing successful
-
-            // it is possible for the subscription execution to be run by a third party
-            // incentivized in the terms of the subscription with a gasToken and gasPrice
-            // pay that out now...
-            if (gasPrice > 0) {
-                if (gasToken == address(0)) {
-                    // this is a case where the subscriber will pay for the tx using
-                    // ethereum out of the subscription contract itself
-                    // for this to work the publisher must send ethereum to the contract
-                    require(msg.sender.call.value(gasPrice).gas(36000)(),//still unsure about how much gas to use here
-                        "Subscription contract failed to pay ether to relayer"
-                    );
-                } else if (gasPayer == address(this) || gasPayer == address(0)) {
-                    // in this case, this contract will pay a token to the relayer to
-                    // incentivize them to pay the gas for the meta transaction
-                    require(ERC20(gasToken).transfer(msg.sender, gasPrice),
-                        "Failed to pay gas as contract"
-                    );
-                } else {
-                    // if all else fails, we expect that some account (CAN BE ANY ACCOUNT)
-                    // has approved this contract to move tokens on their behalf
-                    // this is really cool because the subscriber, the publisher, OR any
-                    // third party could reward the relayers with an approved token
-                    require(
-                        ERC20(gasToken).transferFrom(gasPayer, msg.sender, gasPrice),
-                        "Failed to pay gas in tokens from approved gasPayer"
-                    );
-                }
-            }
-
-        } else {
-
-            //if the transaction is not successful, we want to roll back the timestamp so
-            // we can try again soon
-            nextValidTimestamp[subscriptionHash] = tempValidTimestamp;
-
-            emit FailedExecuteSubscription(
-                from, to, value, data, operation, periodSeconds, gasToken, gasPrice, gasPayer
-            );
-        }
-
-        return result;
+        return true;
     }
-
 
 
     // Gnosis Safe is the dopest but it has a lot of functionality we dont need

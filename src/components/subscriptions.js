@@ -173,7 +173,7 @@ class Subscriptions extends Component {
     if(subscriptions.length>0){
       title=(
         <div style={{color:"#dfdfdf"}}>
-          Your Subscriptions:
+          Subscriptions:
         </div>
       )
     }

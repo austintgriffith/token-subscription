@@ -56,7 +56,7 @@ let redis = new Redis({
 })
 
 console.log("LOADING CONTRACTS")
-contracts = ContractLoader(["SomeStableToken","Subscription"],web3);
+contracts = ContractLoader(["SomeStableToken","Subscription","Example"],web3);
 
 //my local geth node takes a while to spin up so I don't want to start parsing until I'm getting real data
 function checkForGeth() {
@@ -316,6 +316,30 @@ function doMetaTx(contract,metatx){
   })
 }
 
+app.get('/abi/:address', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  console.log("/abi",req.params)
+  let abiString = false
+  for(let c in contracts){
+    if(contracts[c]._address.toLowerCase()==req.params.address.toLowerCase()){
+      res.set('Content-Type', 'application/json');
+      console.log("Found matching address:",contracts[c])
+      try{
+        abiString = JSON.stringify(contracts[c]._jsonInterface)
+      }catch(e){
+        console.log(e)
+      }
+    }
+  }
+  if(abiString){
+    res.end(JSON.stringify({status: "1", message: "OK", result:abiString}));
+  }else{
+    res.end(JSON.stringify({status: "0", message: "UNKNOWN ADDRESS"}));
+  }
+
+
+})
+
 app.post('/saveSubscription', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   console.log("/saveSubscription",req.body)
@@ -382,6 +406,7 @@ function doSubscription(contract,subscriptionObject){
     gas: 1000000,
     gasPrice:Math.round(4 * 1000000000)
   }
+
   //const result = await clevis("contract","forward","BouncerProxy",accountIndexSender,sig,accounts[accountIndexSigner],localContractAddress("Example"),"0",data,rewardAddress,reqardAmount)
   console.log("subscriptionObject",subscriptionObject.parts[0],subscriptionObject.parts[1],subscriptionObject.parts[2],subscriptionObject.parts[3],subscriptionObject.parts[4],subscriptionObject.parts[5],subscriptionObject.parts[6],subscriptionObject.parts[7],subscriptionObject.parts[8],subscriptionObject.signature)
   console.log("PARAMS",txparams)

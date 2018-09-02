@@ -28,7 +28,7 @@ class TxBuilder extends Component {
       let {DEBUG} = this.state.config
       let resultingContract
       try{
-        if(!contractAddress) contractAddress="0x836a40ea2742d8154a5d50fccc4dc74a1dd3f823"
+        if(!contractAddress) contractAddress="0x836a40ea2742d8154a5d50fccc4dc74a1dd3f823"//default to a token just in case
 
         if(DEBUG) console.log("TxBuilder - Loading Contract ABI for address JK HARDCODED FOR NOW ",contractAddress)
 
@@ -39,15 +39,48 @@ class TxBuilder extends Component {
         })
         .then((response)=>{
           if(response && response.data){
-            //console.log("ABI",response.data)
-            let abi = JSON.parse(response.data.result)
-            //console.log("CREATE CONTRACT",abi,contractAddress)
-            let contract = new this.props.web3.eth.Contract(abi,contractAddress)
-              resultingContract = contract.methods
-              resultingContract._address = contractAddress
-              resultingContract._abi = abi
-              resultingContract._contract = contract
-            resolve(resultingContract)
+            console.log("ABI FROM API:",response.data)
+            try{
+              //console.log("ABI",response.data)
+              let abi = JSON.parse(response.data.result)
+              //console.log("CREATE CONTRACT",abi,contractAddress)
+              let contract = new this.props.web3.eth.Contract(abi,contractAddress)
+                resultingContract = contract.methods
+                resultingContract._address = contractAddress
+                resultingContract._abi = abi
+                resultingContract._contract = contract
+              resolve(resultingContract)
+            }catch(e){
+              console.log(e)
+              console.log("Failed to load abi for ",contractAddress,"Let's try hitting the local url...")
+              axios.get(this.props.backendUrl+"abi/"+contractAddress, { crossdomain: true })
+              .catch((err)=>{
+                console.log("Error getting gas price",err)
+                reject(err)
+              })
+              .then((response)=>{
+                if(response && response.data){
+                  console.log("ABI FROM API:",response.data)
+                  if(!response.data.result){
+                    reject(response.data)
+                  }
+                  try{
+                    let abi = JSON.parse(response.data.result)
+                    //console.log("CREATE CONTRACT",abi,contractAddress)
+                    let contract = new this.props.web3.eth.Contract(abi,contractAddress)
+                      resultingContract = contract.methods
+                      resultingContract._address = contractAddress
+                      resultingContract._abi = abi
+                      resultingContract._contract = contract
+                      console.log("resolving with contract...")
+                    resolve(resultingContract)
+                  }catch(e){
+                    console.log(e)
+                    reject(e)
+                  }
+                }
+              })
+            }
           }
         })
       }catch(e){
@@ -57,25 +90,30 @@ class TxBuilder extends Component {
     })
   }
   async componentDidMount(){
-    let contract = await this.loadContract()
-    if(contract){
-      let writeFunctions = []
-      for(let f in contract._abi){
-        let fn = contract._abi[f]
-        if(fn&&fn.type&&fn.type=="function"&&!fn.constant){
-          writeFunctions.push(fn)
+    try{
+      let contract = await this.loadContract(this.props.contractAddress)
+      if(contract){
+        let writeFunctions = []
+        for(let f in contract._abi){
+          let fn = contract._abi[f]
+          if(fn&&fn.type&&fn.type=="function"&&!fn.constant){
+            writeFunctions.push(fn)
+          }
         }
-      }
-      this.setState({contract:contract,writeFunctions:writeFunctions},()=>{
-        this.handleInput({target:{name:"forceLoad",value:true}})
-      })
+        this.setState({contract:contract,writeFunctions:writeFunctions},()=>{
+          this.handleInput({target:{name:"forceLoad",value:true}})
+        })
 
-    }else{
-      console.log("ERROR, NO CONTRACT LOADED FOR TX BUILDER")
+      }else{
+        console.log("ERROR, NO CONTRACT LOADED FOR TX BUILDER")
+        this.setState({failed:true})
+      }
+    }catch(e){
+      console.log(e)
+      this.setState({failed:true})
     }
   }
   handleInput(e){
-    console.log("IIIIINNNNPPPUUUUUTTTTT")
     let update = {}
     update[e.target.name] = e.target.value
     this.setState(update,()=>{
@@ -127,6 +165,15 @@ class TxBuilder extends Component {
   }
   render(){
     if(!this.state || !this.state.contract){
+
+      if(this.state.failed){
+        return (
+          <div style={{}}>
+            (To address is not a Contract with source code available.)
+          </div>
+        )
+      }
+
       return (
         <div style={{}}>
           loading contract...

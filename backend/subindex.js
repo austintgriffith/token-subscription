@@ -85,9 +85,9 @@ function startParsers(){
           console.log("Check Sub Signature:",subscriptions[t].signature)
           let contract = new web3.eth.Contract(contracts.Subscription._jsonInterface,subscriptions[t].subscriptionContract)
           console.log("loading hash...")
-          let doubleCheckHash = await contract.methods.getSubscriptionHash(subscriptions[t].parts[0],subscriptions[t].parts[1],subscriptions[t].parts[2],subscriptions[t].parts[3],subscriptions[t].parts[4],subscriptions[t].parts[5],subscriptions[t].parts[6],subscriptions[t].parts[7]).call()
+          let doubleCheckHash = await contract.methods.getSubscriptionHash(subscriptions[t].parts[0],subscriptions[t].parts[1],subscriptions[t].parts[2],subscriptions[t].parts[3],subscriptions[t].parts[4],subscriptions[t].parts[5],subscriptions[t].parts[6],subscriptions[t].parts[7],subscriptions[t].parts[8]).call()
           console.log("checking if ready...")
-          let ready = await contract.methods.isSubscriptionReady(subscriptions[t].parts[0],subscriptions[t].parts[1],subscriptions[t].parts[2],subscriptions[t].parts[3],subscriptions[t].parts[4],subscriptions[t].parts[5],subscriptions[t].parts[6],subscriptions[t].parts[7],subscriptions[t].signature).call()
+          let ready = await contract.methods.isSubscriptionReady(subscriptions[t].parts[0],subscriptions[t].parts[1],subscriptions[t].parts[2],subscriptions[t].parts[3],subscriptions[t].parts[4],subscriptions[t].parts[5],subscriptions[t].parts[6],subscriptions[t].parts[7],subscriptions[t].parts[8],subscriptions[t].signature).call()
           console.log("READY:",ready)
           if(ready){
             console.log("subscription says it's ready...........")
@@ -348,10 +348,10 @@ function doSubscription(contract,subscriptionObject){
   }
 
   //const result = await clevis("contract","forward","BouncerProxy",accountIndexSender,sig,accounts[accountIndexSigner],localContractAddress("Example"),"0",data,rewardAddress,reqardAmount)
-  console.log("subscriptionObject",subscriptionObject.parts[0],subscriptionObject.parts[1],subscriptionObject.parts[2],subscriptionObject.parts[3],subscriptionObject.parts[4],subscriptionObject.parts[5],subscriptionObject.parts[6],subscriptionObject.parts[7],subscriptionObject.signature)
+  console.log("subscriptionObject",subscriptionObject.parts[0],subscriptionObject.parts[1],subscriptionObject.parts[2],subscriptionObject.parts[3],subscriptionObject.parts[4],subscriptionObject.parts[5],subscriptionObject.parts[6],subscriptionObject.parts[7],subscriptionObject.parts[8],subscriptionObject.signature)
   console.log("PARAMS",txparams)
   console.log("---========= EXEC ===========-----")
-  contract.methods.executeSubscription(subscriptionObject.parts[0],subscriptionObject.parts[1],subscriptionObject.parts[2],subscriptionObject.parts[3],subscriptionObject.parts[4],subscriptionObject.parts[5],subscriptionObject.parts[6],subscriptionObject.parts[7],subscriptionObject.signature).send(
+  contract.methods.executeSubscription(subscriptionObject.parts[0],subscriptionObject.parts[1],subscriptionObject.parts[2],subscriptionObject.parts[3],subscriptionObject.parts[4],subscriptionObject.parts[5],subscriptionObject.parts[6],subscriptionObject.parts[7],subscriptionObject.parts[8],subscriptionObject.signature).send(
   txparams ,(error, Hash)=>{
     console.log("TX CALLBACK",error,Hash)
   })

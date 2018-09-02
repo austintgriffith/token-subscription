@@ -5,6 +5,7 @@ import Web3 from 'web3';
 import queryString from 'query-string';
 import axios from 'axios';
 import Miner from './components/miner.js';
+import TxBuilder from './components/txBuilder.js';
 import Subscriptions from './components/subscriptions.js';
 let backendUrl = "http://localhost:10002/"
 console.log("window.location:",window.location)
@@ -40,14 +41,18 @@ class App extends Component {
       gasPayer:getParams.gasPayer,
       gasPrice:getParams.gasPrice,
       gasToken:getParams.gasToken,
-      url: ""
+      functionName:getParams.functionName,
+      url: "",
+      contract: false
+    }
+    for(let c=1;c<9;c++){
+      this.state['functionArg'+c] = getParams['functionArg'+c];
     }
   }
   componentDidMount(){
     this.poll()
     setInterval(this.poll.bind(this),1700)
   }
-
   deploySubscription() {
     let {web3,tx,contracts} = this.state
     console.log("Deploying Subscription Contract...")
@@ -107,8 +112,16 @@ class App extends Component {
   async sendSubscription(){
     let {account,toAddress,timeType,value,data,operation,subscriptionContract,web3,gasToken,gasPrice,gasPayer} = this.state
 
-    let txData = data //something like this to say, hardcoded, we're sending approved tokens
+    if(!value) value=0
+
     let gasLimit = 360000 // TODO this will need to be a thing now with delegated exec
+
+    if(!operation){
+      operation=0
+    }else{
+      operation=parseInt(operation)
+    }
+    console.log("operation",operation)
 
     let periodSeconds = this.state.timeAmount;
     if(timeType=="minutes"){
@@ -125,6 +138,11 @@ class App extends Component {
     if(!gasPayer) gasPayer = "0x0000000000000000000000000000000000000000"
     if(!gasPrice) gasPrice = 0
 
+    let txData = "0x00"
+    if(data){
+      txData=data;
+    }
+
     /*
     address from, //the subscriber
     address to, //the publisher
@@ -138,11 +156,23 @@ class App extends Component {
     bytes signature //proof the subscriber signed the meta trasaction
      */
 
+     console.log(
+       this.state.account,
+       this.state.toAddress,
+       value*10**18,
+       txData,
+       operation,
+       periodSeconds,
+       gasToken,
+       gasPrice*10**18,
+       gasPayer,
+     )
+
     const parts = [
       this.state.account,
       this.state.toAddress,
-      web3.utils.toTwosComplement(value),
-      data,
+      web3.utils.toTwosComplement(value*10**18),
+      txData,
       web3.utils.toTwosComplement(operation),
       web3.utils.toTwosComplement(periodSeconds),
       gasToken,
@@ -248,7 +278,7 @@ class App extends Component {
               <div className="titleCenter" style={{marginTop:-50}}>
                 <Scaler config={{origin:"center center"}}>
                 <div style={{width:"100%",textAlign:"center",fontSize:120}}>
-                 sub.metatx.io
+                 byoc.metatx.io
                 </div>
                 <div style={{width:"100%",textAlign:"center",fontSize:24}}>
                  <div>recurring subscriptions on the ethereum blockchain</div>
@@ -323,14 +353,21 @@ class App extends Component {
           }
 
           let toAddressExtra = ""
+          let txbuilder = ""
 
-          console.log("this.state.toAddress",this.state.toAddress)
+          //console.log("this.state.toAddress",this.state.toAddress)
           if(this.state.toAddress && this.state.toAddress.length==42){
             toAddressExtra = (
               <Address
                 {...this.state}
                 address={this.state.toAddress.toLowerCase()}
               />
+            )
+            txbuilder = (
+              <TxBuilder {...this.state} onUpdate={update => {
+                console.log("TXBUILDER UPDATE",update)
+                this.setState(update)
+              }}/>
             )
           }
 
@@ -370,7 +407,7 @@ class App extends Component {
 
               <div style={{padding:20}}>
                 <div style={{fontSize:40,padding:20}}>
-                  Create Subscription
+                  Create Delegated Execution Subscription
                 </div>
 
                 <div>
@@ -392,7 +429,7 @@ class App extends Component {
                 </div>
 
                 <div>
-                To Address:<input
+                On Contract Address:<input
                     style={{verticalAlign:"middle",width:400,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
                     type="text" name="toAddress" value={this.state.toAddress} onChange={this.handleInput.bind(this)}
                 />
@@ -400,17 +437,18 @@ class App extends Component {
                 </div>
 
                 <div>
-                Value:<input
+                With Value:<input
                     style={{verticalAlign:"middle",width:400,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
                     type="text" name="value" value={this.state.value} onChange={this.handleInput.bind(this)}
                 />
                 </div>
 
-                <div>
-                Tx Data:<input
-                    style={{verticalAlign:"middle",width:400,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
+                <div style={{margin:0,border:"1px solid #55555",backgroundColor:"#393939",padding:10}}>
+                {txbuilder}
+                Encoded Data Bytes:<input
+                    style={{verticalAlign:"middle",width:600,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}
                     type="text" name="data" value={this.state.data} onChange={this.handleInput.bind(this)}
-                />(TODO: data builder/encoder)
+                />
                 </div>
 
 

@@ -26,9 +26,9 @@ class Subscriptions extends Component {
       //console.log(response)
       this.setState({subscriptions:response.data},async ()=>{
         for(let s in this.state.subscriptions){
-          let signed  = await this.props.subscriptionContract.publisherSigned(this.state.subscriptions[s].subscriptionHash).call()
+          //let signed  = await this.props.subscriptionContract.publisherSigned(this.state.subscriptions[s].subscriptionHash).call()
           //console.log("SIGNED ",signed,this.state.subscriptions[s].subscriptionHash,)
-          this.state.subscriptions[s].signed=signed
+          //this.state.subscriptions[s].signed=signed
           //console.log(this.state.subscriptions)
           this.setState({subscriptions:this.state.subscriptions})
         }

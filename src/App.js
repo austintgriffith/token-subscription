@@ -97,10 +97,13 @@ class App extends Component {
     .catch((error)=>{
       console.log(error);
     });
-    if(this.state.subscriptionContract&&this.state.subscriptionContract.purpose){
-      this.setState({purpose:await this.state.subscriptionContract.purpose().call(),
+    if(this.state.web3 && this.state.subscriptionContract&&this.state.subscriptionContract.purpose&&typeof this.state.subscriptionContract.author == "function"){
+      //let authorHex =
+      this.setState({
+        purpose:await this.state.subscriptionContract.purpose().call(),
         author:await this.state.subscriptionContract.author().call(),
-        version:await this.state.subscriptionContract.version().call()
+        //version:await this.state.subscriptionContract.n().call()
+        //author:this.state.web3.utils.hexToUtf8(authorHex)
       })
     }
 
@@ -549,7 +552,7 @@ class App extends Component {
               <Events
                 config={{hide:false,DEBUG:false}}
                 contract={subscriptionContract}
-                eventName={"ContractCreation"}
+                eventName={"Announce"}
                 block={block}
                 /*filter={{from:this.state.account}}*/
                 onUpdate={(eventData,allEvents)=>{
@@ -558,6 +561,17 @@ class App extends Component {
                 }}
               />
 
+              <Events
+                config={{hide:false,DEBUG:false}}
+                contract={subscriptionContract}
+                eventName={"ContractCreation"}
+                block={block}
+                /*filter={{from:this.state.account}}*/
+                onUpdate={(eventData,allEvents)=>{
+                  console.log("EVENT DATA:",eventData)
+                  this.setState({events:allEvents})
+                }}
+              />
 
               <input
                   style={{verticalAlign:"middle",width:300,margin:6,maxHeight:20,padding:5,border:'2px solid #ccc',borderRadius:5}}

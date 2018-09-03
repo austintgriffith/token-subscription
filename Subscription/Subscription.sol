@@ -52,14 +52,15 @@ contract Subscription is Ownable {
         EXPIRED
     }
     enum Operation {
-       Call,
-       DelegateCall,
-       Create
+        Call,
+        DelegateCall,
+        Create
     }
 
-    // let's waste some gas and define the author and purpose on chain
+    //waste some gas and define our purpose on-chain :)
     string public purpose = "Delegated Execution Subscriptions (POC) [EIP1337/948]";
     string public author = "Austin Thomas Griffith - https://austingriffith.com";
+
     constructor() public { }
 
     // contract will need to hold funds to pay gas
@@ -82,6 +83,9 @@ contract Subscription is Ownable {
     );
     event ContractCreation(address newContract);
     event UpdateWhitelist(address account, bool value);
+
+    //this event is used just to prove that the delegatecall hits it back
+    event Announce(bytes32 message,uint256 timestamp,address sender,address context);
 
     // similar to a nonce that avoids replay attacks this allows a single execution
     // every x seconds for a given subscription
@@ -354,13 +358,13 @@ contract Subscription is Ownable {
                 // this is a case where the subscriber will pay for the tx using
                 // ethereum out of the subscription contract itself
                 // for this to work the subscriber must send ethereum to the contract
-                require(msg.sender.call.value(gasPrice).gas(36000)(),//still unsure about how much gas to use here
+                require(tx.origin.call.value(gasPrice).gas(36000)(),//still unsure about how much gas to use here
                     "Subscription contract failed to pay ether to relayer"
                 );
             } else if (gasPayer == address(this) || gasPayer == address(0)) {
                 // in this case, this contract will pay a token to the relayer to
                 // incentivize them to pay the gas for the meta transaction
-                require(ERC20(gasToken).transfer(msg.sender, gasPrice),
+                require(ERC20(gasToken).transfer(tx.origin, gasPrice),
                     "Failed to pay gas as contract"
                 );
             } else {
@@ -369,7 +373,7 @@ contract Subscription is Ownable {
                 // this is really cool because the subscriber, the publisher, OR any
                 // third party could reward the relayers with an approved token
                 require(
-                    ERC20(gasToken).transferFrom(gasPayer, msg.sender, gasPrice),
+                    ERC20(gasToken).transferFrom(gasPayer, tx.origin, gasPrice),
                     "Failed to pay gas in tokens from approved gasPayer"
                 );
             }

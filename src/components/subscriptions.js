@@ -144,7 +144,7 @@ class Subscriptions extends Component {
         }
 
         subscriptions.push(
-          <div style={{fontSize:12}}>
+          <div key={"sub"+s} style={{fontSize:12}}>
 
             <Blockie address={this.state.subscriptions[s].parts[0]}/>
 

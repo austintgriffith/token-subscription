@@ -220,6 +220,12 @@ class TxBuilder extends Component {
                 this.handleInput({target:{name:key,value:this.state[key]*10**18}})
               }}>{"*10^18"}</button>
             )
+          }else if(input.type=="bytes32"){
+            extra = (
+              <button onClick={()=>{
+                this.handleInput({target:{name:key,value:this.props.web3.utils.toHex(this.state[key])}})
+              }}>{"hex"}</button>
+            )
           }else if(input.type=="address"&&this.state[key]){
             extra = (
               <Blockie address={this.state[key].toLowerCase()}/>

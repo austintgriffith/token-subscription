@@ -2,13 +2,11 @@
 
 Subscribers sign a single off-chain meta transaction that is periodically resubmitted to the blockchain to create a trustless set-it-and-forget-it subscription model on Ethereum. 
 
-[https://github.com/ethereum/EIPs/pull/1337](https://github.com/ethereum/EIPs/pull/1337)
+[https://sub.metatx.io](https://sub.metatx.io)
 
 ## Demo
 
 [![screencast.png](https://user-images.githubusercontent.com/2653167/44634126-7a5b0d00-a952-11e8-85fd-16e66a36ad07.png)](https://youtu.be/_znjpTRGCbs)
-
-[https://sub.metatx.io](https://sub.metatx.io)
 
 ## Abstract
 
@@ -33,4 +31,6 @@ Meta transactions can be submitted by any relayer and the relayer can be incenti
  ██║██████╔╝██████╔╝   ██║  
  ╚═╝╚═════╝ ╚═════╝    ╚═╝  -EIP-
  ```
+ 
+ [https://github.com/ethereum/EIPs/pull/1337](https://github.com/ethereum/EIPs/pull/1337)
 
